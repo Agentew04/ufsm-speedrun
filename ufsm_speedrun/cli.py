@@ -14,7 +14,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from . import config, curriculos, db, discover, ementas, endpoints, relacoes
+from . import config, curriculos, db, discover, ementas, endpoints, relacoes, validacao
 from .http import UfsmClient
 
 VERSAO_DEMO = "104760"  # Ciência da Computação, currículo 2024
@@ -241,6 +241,18 @@ def cmd_tudo(args: argparse.Namespace) -> int:
     return pior
 
 
+def cmd_validar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        validacao.gerar(conn, Path(args.out) if args.out else None)
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -348,6 +360,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--delay", type=float, default=config.MIN_INTERVAL)
     p.add_argument("--quiet", action="store_true")
     p.set_defaults(func=cmd_tudo)
+
+    p = sub.add_parser("validar", help="fase 5: confere o banco e gera docs/relatorio-qualidade.md")
+    p.add_argument("--out", default=None, help="caminho do relatório (padrão: docs/relatorio-qualidade.md)")
+    p.set_defaults(func=cmd_validar)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)
