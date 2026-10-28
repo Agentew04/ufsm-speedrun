@@ -206,12 +206,32 @@ def checar_densidade_relacoes(conn: sqlite3.Connection) -> Achado:
     pre = _escalar(conn, "SELECT COUNT(*) FROM prereq_item WHERE tipo_item IN (1, 2)")
     eqv = _escalar(conn, "SELECT COUNT(*) FROM equivalencia_item")
     pendentes = com_flag - com_bloco
-    return Achado(
-        "Pré-requisitos e equivalências (Fase 3)",
-        "ok" if pendentes == 0 else "atencao",
-        f"{com_flag}/{total} ofertas com flag · {com_bloco} com relação gravada · "
-        f"{pendentes} pendentes · {pre} arestas de prereq · {eqv} itens de equivalência",
+
+    # FK aceita NULL, então "aponta para ninguém" não aparece no foreign_key_check.
+    # (Foi assim que 5.008 equivalências passaram sem referência.)
+    eqv_orfas = _escalar(
+        conn, "SELECT COUNT(*) FROM equivalencia_item WHERE disciplina_req_id IS NULL"
     )
+    pre_orfas = _escalar(
+        conn,
+        "SELECT COUNT(*) FROM prereq_item WHERE tipo_item IN (1, 2) AND disciplina_req_id IS NULL",
+    )
+
+    if eqv_orfas or pre_orfas:
+        severidade = "problema"
+    elif pendentes:
+        severidade = "atencao"
+    else:
+        severidade = "ok"
+
+    detalhe = (
+        f"{com_flag}/{total} ofertas com flag · {com_bloco} com relação gravada · "
+        f"{pendentes} pendentes · {pre} arestas de prereq · {eqv} itens de equivalência"
+    )
+    if eqv_orfas or pre_orfas:
+        detalhe += f" · ❗ {pre_orfas} prereq e {eqv_orfas} equivalências sem disciplina referenciada"
+
+    return Achado("Pré-requisitos e equivalências (Fase 3)", severidade, detalhe)
 
 
 # --------------------------------------------------------------------- relatório

@@ -14,7 +14,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from . import config, curriculos, db, discover, ementas, endpoints, relacoes, validacao
+from . import (config, curriculos, db, discover, ementas, endpoints,
+               equivalencia, relacoes, validacao)
 from .http import UfsmClient
 
 VERSAO_DEMO = "104760"  # Ciência da Computação, currículo 2024
@@ -253,6 +254,25 @@ def cmd_validar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_equivalencia(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+
+    cfg = equivalencia.Config(top_k=args.top_k,
+                              limiar_equivalente=args.limiar,
+                              limiar_nao=args.limiar_nao)
+    conn = db.connect()
+    inicio = time.monotonic()
+    try:
+        resultado = equivalencia.run(conn, cfg, exportar=not args.sem_export)
+        equivalencia.relatorio(conn, resultado)
+        print(f"  tempo: {time.monotonic() - inicio:.0f}s\n")
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -364,6 +384,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("validar", help="fase 5: confere o banco e gera docs/relatorio-qualidade.md")
     p.add_argument("--out", default=None, help="caminho do relatório (padrão: docs/relatorio-qualidade.md)")
     p.set_defaults(func=cmd_validar)
+
+    p = sub.add_parser("equivalencia", help="fase 6a: equivalência heurística entre disciplinas")
+    p.add_argument("--top-k", type=int, default=12, help="vizinhos por disciplina no bloqueio")
+    p.add_argument("--limiar", type=float, default=0.55, help="score mínimo para 'equivalente'")
+    p.add_argument("--limiar-nao", type=float, default=0.22, help="score máximo para 'nao_equivalente'")
+    p.add_argument("--sem-export", action="store_true", help="não exportar a banda de revisão")
+    p.set_defaults(func=cmd_equivalencia)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)

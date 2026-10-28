@@ -49,7 +49,10 @@ def _persistir_blocos(conn: sqlite3.Connection, dc_id: int, blocos: list[dict],
             t = tipo.get("tipo") or {}
             tipo_item = t.get("item")
             for item in tipo.get("itens") or []:
-                req = item.get("disciplinaRequisito") or {}
+                # ⚠️ O campo muda de nome conforme o endpoint:
+                #   pré-requisitos -> "disciplinaRequisito"
+                #   equivalências  -> "disciplina"
+                req = item.get("disciplinaRequisito") or item.get("disciplina") or {}
                 if req.get("id") and req.get("codigo"):
                     upsert_disciplina(conn, req)
 

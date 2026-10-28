@@ -40,6 +40,16 @@ def connect(db_path: Path = config.DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def migrar(conn: sqlite3.Connection) -> None:
+    """Ajustes de schema em bancos já existentes (CREATE IF NOT EXISTS não altera)."""
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(similaridade_ementa)")}
+    if colunas and "score_final" not in colunas:
+        conn.execute("ALTER TABLE similaridade_ementa ADD COLUMN score_final REAL")
+    if colunas and "motivo" not in colunas:
+        conn.execute("ALTER TABLE similaridade_ementa ADD COLUMN motivo TEXT")
+    conn.commit()
+
+
 def init_db(db_path: Path = config.DB_PATH, *, recreate: bool = False) -> Path:
     """Cria o banco aplicando schema.sql. Idempotente."""
     if recreate and db_path.exists():
@@ -48,6 +58,7 @@ def init_db(db_path: Path = config.DB_PATH, *, recreate: bool = False) -> Path:
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.commit()
+        migrar(conn)
     finally:
         conn.close()
     return db_path

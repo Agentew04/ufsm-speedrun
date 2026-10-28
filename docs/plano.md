@@ -216,20 +216,27 @@ e **zero penalidade** (um único 503 transitório no início).
   - duplicidade `(versao, estrutura, disciplina)`
 - saída: `docs/relatorio-qualidade.md` gerado
 
-### Fase 6a — equivalência heurística
+### ✅ Fase 6a — equivalência heurística (implementada)
 
-Regra do projeto (definida pelo usuário):
-> Candidato a equivalente se `ch_do_alvo <= ch_do_candidato` **e** similaridade de
-> ementa **≥ 75%**.
+Comando: `python -m ufsm_speedrun equivalencia` · método e evidências em
+**[docs/equivalencia.md](equivalencia.md)**.
 
-Implementação:
-1. tokenizar `programa_texto` + `objetivos` (lowercase, sem stopwords PT, stemming leve)
-2. TF-IDF + similaridade de cosseno (par a par dentro do mesmo "cluster" de
-   nome/código, para não comparar 4 mil × 4 mil = 16 M pares)
-3. complemento: Jaccard de tokens
-4. gravar em `similaridade_ementa` com `veredito`
-5. **revisão humana**: gerar tabela `docs/revisao-equivalencias.md` com os pares
-   de score entre 0,6 e 0,85 — a faixa perigosa
+**A regra original ("CH ≥ alvo e ementa ≥ 75% igual") não se sustenta nos dados**:
+só 16% das equivalências oficiais têm cosseno ≥ 0,75. Equivalência no SIE é
+administrativa (reforma curricular), não textual. E Levenshtein no nome é
+contraproducente: os pares com nome mais parecido (TCC I × TCC II, 0,97) são
+justamente os que **não** são equivalentes.
+
+Método final:
+1. bloqueio por top-12 vizinhos TF-IDF (68,6 mil pares, nunca 62 milhões)
+2. filtros duros: sequência (I/II/III), razão de CH < 0,70, ementa curta
+3. score composto: 0,62·ementa + 0,14·nome + 0,16·CH + 0,08·departamento
+4. veredito: `equivalente` (2.325) · `revisar` (58.419) · `nao_equivalente` (7.863)
+5. banda prioritária para LLM: **462 pares** exportados em
+   `data/exports/equivalencias-prioritarias.csv`
+
+O nome não decide nada — serve para bloquear e para detectar sequência. A LLM
+entra só na faixa de score alto sem conflito de sequência.
 
 ### Fase 6b — otimizador de rota
 

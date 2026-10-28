@@ -232,11 +232,13 @@ CREATE TABLE IF NOT EXISTS equivalencia_item (
 CREATE TABLE IF NOT EXISTS similaridade_ementa (
     disciplina_a   INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
     disciplina_b   INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
-    score_cosine   REAL,
-    score_jaccard  REAL,
+    score_cosine   REAL,                     -- TF-IDF na ementa
+    score_jaccard  REAL,                     -- Jaccard de tokens do nome
+    score_final    REAL,                     -- combinação calibrada
     ch_a           INTEGER,
     ch_b           INTEGER,
-    veredito       TEXT,                     -- equivalente | parcial | nao_equivalente
+    veredito       TEXT,                     -- equivalente | revisar | nao_equivalente
+    motivo         TEXT,                     -- o que pesou (regra de sufixo, CH, etc.)
     calculado_em   TEXT,
     PRIMARY KEY (disciplina_a, disciplina_b)
 );
