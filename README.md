@@ -1,0 +1,49 @@
+# ufsm-speedrun
+
+Mapeamento das rotas de graduação da UFSM: coleta dos currículos de todos os
+cursos, modelagem em SQLite e (no fim) uma dashboard para descobrir a rota ótima
+entre cursos, aproveitando cadeiras e equivalências.
+
+## Estado
+
+**Fase 0 concluída** — cliente HTTP polido, log/cache em disco e esquema do banco.
+Veja [docs/plano.md](docs/plano.md) para o plano completo e
+[docs/ufsm-api.md](docs/ufsm-api.md) para a documentação da API do SIE.
+
+## Setup
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+## Uso
+
+```powershell
+# cria data/ufsm.db a partir do schema
+.\.venv\Scripts\python.exe -m ufsm_speedrun init-db
+
+# valida o pipeline com 1 request (e prova que o cache funciona)
+.\.venv\Scripts\python.exe -m ufsm_speedrun smoke
+
+# o que já foi coletado
+.\.venv\Scripts\python.exe -m ufsm_speedrun stats
+```
+
+## Como os dados são guardados
+
+```
+data/
+├── raw/<endpoint>/<chave>.json   # envelope com request + response + hash
+├── logs/requests.jsonl           # auditoria append-only (sem o corpo)
+└── ufsm.db
+```
+
+Toda resposta é gravada antes de ser usada. O crawl acontece **uma vez**;
+reprocessar o banco é só reler `data/raw/` — nunca refazer request.
+
+## Política de acesso ao site da UFSM
+
+1 request por vez, intervalo mínimo de 1,75 s, backoff exponencial, `User-Agent`
+identificável e respeito ao `robots.txt`. Detalhes em
+[docs/ufsm-api.md §12](docs/ufsm-api.md).

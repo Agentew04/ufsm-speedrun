@@ -1,0 +1,19 @@
+# ---- Python ----
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# ---- Dados (NUNCA versionar: raw + db + logs) ----
+data/
+
+# ---- Investigação descartável ----
+_probe/
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

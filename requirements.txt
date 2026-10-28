@@ -1,0 +1,4 @@
+# Dependências do projeto.
+# Fase 0 (cliente HTTP + SQLite) usa só a stdlib.
+# As linhas abaixo entram em uso a partir da Fase 1.
+beautifulsoup4>=4.12
