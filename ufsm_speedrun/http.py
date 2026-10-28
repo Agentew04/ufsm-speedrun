@@ -1,4 +1,4 @@
-"""Cliente HTTP para o webservice do SIE.
+"""Cliente HTTP do projeto (webservice SIE + páginas HTML do portal).
 
 Regras embutidas (docs/ufsm-api.md §12):
   * 1 request por vez, intervalo mínimo entre chamadas de rede;
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import socket
 import time
 import urllib.error
@@ -18,6 +19,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from . import config, endpoints
 from .recorder import Recorder, build_envelope, utc_now
@@ -51,6 +53,14 @@ class Result:
     meta: dict[str, Any]
     from_cache: bool
     stats: Stats = field(repr=False, default_factory=Stats)
+
+
+def page_slug(url: str) -> str:
+    """Nome de pasta legível para uma página: .../santa-maria/x/informacoes-do-curriculo
+    -> 'cursos_graduacao_santa-maria_x_informacoes-do-curriculo'."""
+    path = urlparse(url).path.strip("/")
+    slug = re.sub(r"[^a-z0-9]+", "_", path.lower()).strip("_")
+    return (slug or "root")[:90]
 
 
 class UfsmClient:
@@ -87,17 +97,31 @@ class UfsmClient:
         if remaining > 0:
             time.sleep(remaining)
 
-    # ------------------------------------------------------------------- call
-    def call(
+    # -------------------------------------------------------------- atalhos
+    def call(self, endpoint: str, params: dict[str, Any] | None = None,
+             *, json_body: bool = False) -> Result:
+        """POST no webservice do SIE."""
+        return self.fetch("POST", endpoints.url_for(endpoint), params or {},
+                          endpoint=endpoint, json_body=json_body)
+
+    def get_page(self, url: str) -> Result:
+        """GET em uma página HTML do portal (sem header do SIE)."""
+        return self.fetch("GET", url, {}, endpoint=page_slug(url),
+                          send_app_id=False, parse_json=False)
+
+    # ------------------------------------------------------------------- core
+    def fetch(
         self,
-        endpoint: str,
-        params: dict[str, Any] | None = None,
+        method: str,
+        url: str,
+        params: dict[str, Any],
         *,
+        endpoint: str,
         json_body: bool = False,
-        method: str = "POST",
+        send_app_id: bool = True,
+        parse_json: bool = True,
     ) -> Result:
-        params = params or {}
-        url = endpoints.url_for(endpoint)
+        method = method.upper()
         key = Recorder.key_for(method, url, params)
 
         # ---------------------------------------------------- cache em disco
@@ -111,22 +135,28 @@ class UfsmClient:
                     "from_cache": True, "status": envelope["response"]["status"],
                     "bytes": envelope["response"]["bytes"], "elapsed_ms": 0,
                 })
-                self._log(f"  [cache] {endpoint} {params}")
-                return Result(json.loads(envelope["response"]["body"]), envelope["meta"], True, self.stats)
+                cached_body = envelope["response"]["body"]
+                data = json.loads(cached_body) if parse_json else cached_body
+                return Result(data, envelope["meta"], True, self.stats)
 
-        # ------------------------------------------------- chamada de verdade
+        # ------------------------------------------------- cabeçalhos e corpo
         request_headers = {
-            **config.APP_ID_HEADERS,
-            "Accept": "application/json",
+            "Accept": "application/json" if send_app_id else "text/html,application/xhtml+xml",
             "User-Agent": config.USER_AGENT,
         }
-        if json_body:
-            data = json.dumps(params, ensure_ascii=False).encode("utf-8")
-            request_headers["Content-Type"] = "application/json"
-        else:
-            data = urllib.parse.urlencode(params).encode("utf-8")
-            request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        if send_app_id:
+            request_headers.update(config.APP_ID_HEADERS)
 
+        data: bytes | None = None
+        if method == "POST":
+            if json_body:
+                data = json.dumps(params, ensure_ascii=False).encode("utf-8")
+                request_headers["Content-Type"] = "application/json"
+            else:
+                data = urllib.parse.urlencode(params).encode("utf-8")
+                request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+
+        # ------------------------------------------------- chamada de verdade
         last_error: Exception | None = None
         for attempt in range(1, self.max_attempts + 1):
             self._wait_turn()
@@ -159,28 +189,29 @@ class UfsmClient:
                     "body_sha256": envelope["response"]["body_sha256"],
                 })
 
-                size_kb = len(raw) / 1024
-                self._log(f"  [{self.stats.network_calls:>3}] {endpoint} {params} "
-                          f"-> {status} {size_kb:.0f} KB {elapsed_ms} ms")
+                self._log(f"  [{self.stats.network_calls:>3}] {endpoint[:52]:<52} "
+                          f"-> {status} {len(raw)/1024:.0f} KB {elapsed_ms} ms")
 
-                data_json = json.loads(body)
-                if isinstance(data_json, dict) and data_json.get("error") is True:
-                    raise UfsmApiError(data_json.get("mensagem") or "erro não especificado")
-                return Result(data_json, envelope["meta"], False, self.stats)
+                if parse_json:
+                    parsed = json.loads(body)
+                    if isinstance(parsed, dict) and parsed.get("error") is True:
+                        raise UfsmApiError(parsed.get("mensagem") or "erro não especificado")
+                else:
+                    parsed = body
+                return Result(parsed, envelope["meta"], False, self.stats)
 
             except urllib.error.HTTPError as exc:  # 4xx/5xx
                 self._last_call_at = time.monotonic()
-                status = exc.code
                 last_error = exc
                 self.stats.errors += 1
-                if status in (429, 500, 502, 503, 504) and attempt < self.max_attempts:
+                if exc.code in (429, 500, 502, 503, 504) and attempt < self.max_attempts:
                     wait = config.BACKOFF_BASE * (2 ** (attempt - 1))
                     self.stats.retries += 1
-                    self._log(f"  [{endpoint}] HTTP {status}, tentativa {attempt}/{self.max_attempts}, "
-                              f"aguardando {wait:.0f}s")
+                    self._log(f"  [{endpoint}] HTTP {exc.code}, tentativa {attempt}/"
+                              f"{self.max_attempts}, aguardando {wait:.0f}s")
                     time.sleep(wait)
                     continue
-                raise UfsmHttpError(f"HTTP {status} em {endpoint} {params}") from exc
+                raise UfsmHttpError(f"HTTP {exc.code} em {url}") from exc
 
             except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
                 self._last_call_at = time.monotonic()
@@ -193,6 +224,6 @@ class UfsmClient:
                               f"{self.max_attempts}, aguardando {wait:.0f}s")
                     time.sleep(wait)
                     continue
-                raise UfsmHttpError(f"falha de rede em {endpoint} {params}: {exc}") from exc
+                raise UfsmHttpError(f"falha de rede em {url}: {exc}") from exc
 
-        raise UfsmHttpError(f"desisti de {endpoint} {params}: {last_error}")
+        raise UfsmHttpError(f"desisti de {url}: {last_error}")

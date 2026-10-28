@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS disciplina_ch (
 CREATE TABLE IF NOT EXISTS curso (
     id               INTEGER PRIMARY KEY,   -- Curso.id (SIE)
     codigo           TEXT,                  -- 307
-    nome             TEXT NOT NULL,
+    nome             TEXT NOT NULL,         -- nome oficial do SIE
+    nome_lista       TEXT,                  -- nome exibido em /graduacao ("ABI - X")
     nome_unificado   TEXT,
     grau             TEXT,
     modalidade       TEXT,                  -- Bacharelado / Licenciatura / ...
@@ -87,9 +88,12 @@ CREATE TABLE IF NOT EXISTS curso (
     unidade_sigla    TEXT,
     codigo_emec      TEXT,
     url              TEXT,
-    campus           TEXT,                  -- derivado do slug
-    slug             TEXT
+    campus           TEXT,                  -- rótulo: "Santa Maria", "EaD", ...
+    campus_slug      TEXT,                  -- segmento da URL: santa-maria, ...
+    slug             TEXT                   -- slug do curso na URL
 );
+
+CREATE INDEX IF NOT EXISTS idx_curso_campus ON curso(campus_slug);
 
 CREATE TABLE IF NOT EXISTS versao_curriculo (
     id                  INTEGER PRIMARY KEY, -- VersaoCurso.id

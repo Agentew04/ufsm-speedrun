@@ -394,9 +394,20 @@ regex ingênua):
 Regex que funciona:
 `<a class='d-block text-wrap' href=(/cursos/graduacao/[^ >]+) title='([^']*)'`
 
-Resultado medido: **110 cursos**, **103 slugs únicos** (um slug pode ter vários cursos).
-Distribuição: santa-maria 80, educacao-a-distancia 11, frederico-westphalen 7,
-cachoeira-do-sul 6, palmeira-das-missoes 6.
+Resultado medido (2026-10-28): **110 entradas na lista**, **103 URLs únicas** — que
+expõem **148 cursos** no SIE e **528 versões** de currículo.
+
+A diferença entre "110 entradas" e "148 cursos" é a armadilha principal desta etapa:
+**uma página ≠ um curso**. Um mesmo slug hospeda vários cursos (ex.: `musica` = 20
+cursos, `letras` = 4, `fisica` = 4). Por isso é obrigatório coletar **todos** os
+`data-ufsm-curso-id` / todas as `<option data-versao>` da página, e não só o primeiro.
+
+Distribuição dos 148 cursos: santa-maria 117, educacao-a-distancia 11,
+frederico-westphalen 7, palmeira-das-missoes 7, cachoeira-do-sul 6.
+
+> Nota: `slug` **não** é único no banco — o mesmo slug aparece em campi diferentes
+> (`administracao` em Santa Maria e em Palmeira das Missões). A chave da página é
+> `(campus_slug, slug)`.
 
 ### Versões de currículo
 
@@ -441,6 +452,10 @@ O JSON da versão (`VersaoCurso`) já traz tudo que você precisa:
 `situacao.codigo`: `C` = Corrente, `A` = Ativa (legado ainda vigente p/ quem entrou antes),
 `I` = Inativa.
 
+⚠️ **`numero` não é sempre um ano.** Valores reais encontrados: `"2024"`, `"92"`,
+`"2021/2"`, `"2020.2"`, `"2016.2"`, `"."`, `"INATIV"`. Nunca faça `int(numero)`;
+extraia com regex `(\d{4})` e trate o resto como desconhecido.
+
 `nivel.item`: `3` = Graduação, `6`/`10`/`16` = Pós-graduação.
 `tipoPeriodo.item`: `100`=Ano, `200`=Semestre, `300`=Trimestre, `400`=Etapa.
 
@@ -458,12 +473,14 @@ O JSON da versão (`VersaoCurso`) já traz tudo que você precisa:
 | 6 | IDs: `DisciplinaCurriculo.id` vs `Disciplina.id` | endpoint errado | ver §5/§6 vs §8 |
 | 7 | `filhas` ordenadas alfabeticamente pela WS, não por `id` | ordem dos núcleos errada | reordenar por `id` |
 | 8 | `busca.json` exige keyword ≥ 3 chars | não lista tudo | varrer tokens ou ignorar |
-| 9 | Um slug pode ter vários cursos (`letras` = 4) | perda de curso | coletar todos os `data-ufsm-curso-id` |
+| 9 | Um slug pode ter vários cursos (`letras` = 4, `musica` = 20) | perda de curso | coletar todos os `data-ufsm-curso-id` |
 | 10 | Links de curso em `/graduacao` têm `href` sem aspas | regex falha | usar regex tolerante |
-| 11 | Latência alta em `estrutura.json` (~3 s, ~280 KB) | crawl lento | cache em disco + pacing |
+| 11 | Latência alta em `estrutura.json` (0,2–6 s, até 650 KB) | crawl lento | cache em disco + pacing |
 | 12 | Códigos heterogêneos (`042.AGD.MAT.07`) | parsing ingênuo quebra | `codigo` é TEXT, nunca parsear |
 | 13 | Disciplinas inativas ainda aparecem em versões antigas | poluição | filtrar por `situacao` e `versao.situacao` |
 | 14 | Duas chamadas ao mesmo endpoint com params diferentes têm `id` de oferta diferente | dedupe errado | chave = `(versao, estrutura, disciplina)` |
+| 15 | `numero` da versão nem sempre é ano (`2021/2`, `INATIV`, `.`) | ordenação errada | extrair `(\d{4})` com regex |
+| 16 | Busca em massa (`busca.json`) não traz `programaDisciplina` | parece atalho, não é | ementa exige 1 request por código |
 
 ---
 

@@ -6,9 +6,14 @@ entre cursos, aproveitando cadeiras e equivalências.
 
 ## Estado
 
-**Fase 0 concluída** — cliente HTTP polido, log/cache em disco e esquema do banco.
-Veja [docs/plano.md](docs/plano.md) para o plano completo e
-[docs/ufsm-api.md](docs/ufsm-api.md) para a documentação da API do SIE.
+- ✅ **Fase 0** — cliente HTTP polido, log/cache em disco, esquema do banco
+- ✅ **Fase 1** — 148 cursos e 528 versões de currículo descobertos
+- ✅ **Fase 2** — 148 currículos: 1.574 núcleos, 12.313 ofertas, 8.259 disciplinas
+- 🚧 **Fase 3** — pré-requisitos e equivalências (implementada, crawl pendente)
+- 🚧 **Fase 4** — ementas (implementada, crawl pendente)
+
+Plano completo em [docs/plano.md](docs/plano.md) e documentação da API do SIE em
+[docs/ufsm-api.md](docs/ufsm-api.md).
 
 ## Setup
 
@@ -25,6 +30,15 @@ python -m venv .venv
 
 # valida o pipeline com 1 request (e prova que o cache funciona)
 .\.venv\Scripts\python.exe -m ufsm_speedrun smoke
+
+# fases, em ordem (todas retomáveis: o cache evita refazer request)
+.\.venv\Scripts\python.exe -m ufsm_speedrun discover
+.\.venv\Scripts\python.exe -m ufsm_speedrun curriculos
+.\.venv\Scripts\python.exe -m ufsm_speedrun relacoes
+.\.venv\Scripts\python.exe -m ufsm_speedrun ementas
+
+# ou o pipeline inteiro de uma vez
+.\.venv\Scripts\python.exe -m ufsm_speedrun tudo
 
 # o que já foi coletado
 .\.venv\Scripts\python.exe -m ufsm_speedrun stats
@@ -44,6 +58,6 @@ reprocessar o banco é só reler `data/raw/` — nunca refazer request.
 
 ## Política de acesso ao site da UFSM
 
-1 request por vez, intervalo mínimo de 1,75 s, backoff exponencial, `User-Agent`
-identificável e respeito ao `robots.txt`. Detalhes em
+1 request por vez, intervalo mínimo de 1,75 s (`--delay`), backoff exponencial,
+`User-Agent` identificável e respeito ao `robots.txt`. Detalhes em
 [docs/ufsm-api.md §12](docs/ufsm-api.md).

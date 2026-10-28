@@ -3,7 +3,8 @@
 > Documento de retomada. Se o chat for perdido, comece lendo este arquivo e
 > `docs/ufsm-api.md`. Tudo que foi decidido e descoberto está aqui.
 
-Última atualização: 2026-10-28 · status: **Fase 0 concluída**
+Última atualização: 2026-10-28 · status: **Fases 0, 1 e 2 concluídas** ·
+Fases 3 e 4 implementadas (crawl longo pendente) · Fases 5–7 a fazer
 
 ---
 
@@ -43,13 +44,23 @@ Resumo: 7 endpoints POST, header `X-UFSM-Application-ID: SiteWS`, sem token.
 | Ambiente | `.venv/` no projeto |
 | Layout | pacote flat `ufsm_speedrun/` (sem `pip install -e`) |
 
+### Decisões já resolvidas
+
+- **Cursos**: todos os **148** (não 110 — a página tem 103 URLs, mas cada URL pode
+  expor vários cursos). 5 campi + EaD. Campus é gravado por curso (`curso.campus`).
+- **Versões**: as 528 são coletadas na Fase 1 (é barato e fica no cache). A Fase 2
+  processa por padrão só as **148 selecionadas** (`Corrente`, com fallback para a
+  `Ativa` mais recente). Histórico completo: `curriculos --todas`.
+- **Fase 4 (ementas)**: só disciplinas alcançáveis pelas versões selecionadas —
+  evita pagar por disciplina morta de currículo antigo.
+
 ### Decisões ainda em aberto
 
-1. **Versões**: só "Corrente" (recomendado) ou todas as ~150 (inclui histórico)?
-2. **Cursos**: todos os 110 (5 campi + EaD) ou só Santa Maria (80)? *Recomendo todos.*
-3. **Função objetivo da rota**: minimizar nº de semestres, CH total, ou nº de disciplinas?
-4. **Equivalência heurística**: usar só `programaDisciplina` (tipo 2) ou incluir
-   `objetivos` no texto comparado? (recomendo os dois, pesos diferentes)
+1. **Função objetivo da rota**: minimizar nº de semestres, CH total, ou nº de disciplinas?
+2. **Equivalência heurística**: usar só `programaDisciplina` (tipo 2) ou incluir
+   `objetivos` no texto comparado? (recomendo os dois, com pesos diferentes)
+3. **Política de campus** no otimizador: `mesmo_campus` (default) ou `livre`.
+   EaD tratado como campus próprio.
 
 ## 4. Arquitetura
 
@@ -62,10 +73,16 @@ ufsm-speedrun/
 │   ├── config.py               # caminhos + constantes + política de acesso
 │   ├── endpoints.py            # URLs, enums do SIE
 │   ├── recorder.py             # envelope request+response, cache, log
-│   ├── http.py                 # UfsmClient (pacing, retry, cache)
+│   ├── http.py                 # UfsmClient (pacing, retry, cache, GET/POST)
+│   ├── persist.py              # upsert de disciplina (compartilhado)
 │   ├── db.py                   # conexão, init, contagens
 │   ├── schema.sql              # esquema completo
-│   └── cli.py                  # init-db | smoke | stats
+│   ├── discover.py             # fase 1
+│   ├── curriculos.py           # fase 2
+│   ├── relacoes.py             # fase 3
+│   ├── ementas.py              # fase 4
+│   └── cli.py                  # init-db | smoke | discover | curriculos |
+│                               # relacoes | ementas | tudo | stats
 ├── docs/
 │   ├── ufsm-api.md             # engenharia reversa da API
 │   └── plano.md                # este arquivo
@@ -107,29 +124,34 @@ Entregue:
 Critério de aceite (atingido): `smoke` faz 1 request, grava o raw, e a segunda
 chamada vem do cache com hash íntegro.
 
-### Fase 1 — descoberta de cursos e versões
+### ✅ Fase 1 — descoberta de cursos e versões (concluída)
 
-- `GET /graduacao` → parse de `#lista_cursos` (atenção: `href` **sem aspas**)
-- para cada um dos 103 slugs → `GET .../informacoes-do-curriculo`
-- extrair `data-ufsm-curso-id` e `<option data-versao='...'>`
-- popular `curso` + `versao_curriculo`; marcar `selecionada=1` para `situacao=C`
-- comando: `python -m ufsm_speedrun discover`
-- **checkpoint**: 110 cursos, ~150 versões, relatório por campus, lista de cursos
-  sem versão corrente
+Comando: `python -m ufsm_speedrun discover`
 
-Volume: ~104 páginas HTML (~9 MB), ~4 min.
+Resultado real:
+- 103 páginas visitadas, **148 cursos**, **528 versões**, 0 erros
+- 148 versões selecionadas (uma por curso), **0 fallbacks** — todo curso tem Corrente
+- anos das selecionadas: 2004 a 2027
+- 10,5 MB, 261 s (≈1,75 s/request)
 
-### Fase 2 — árvores curriculares
+Achados: uma página ≠ um curso (`musica` = 20 cursos); `numero` nem sempre é ano.
 
-- `POST curso/estrutura.json` com `versao` + `disciplinas=true`
-- popular `estrutura` (recursivo, `pai_id`, ordenar irmãos por `id`),
-  `estrutura_atividade`, `disciplina` (stub), `disciplina_curriculo`
-- comando: `python -m ufsm_speedrun curriculos`
-- **checkpoint** (importante): relatório de *buckets DCG abertos* (nós com
-  `ch_minima` > 0 e zero disciplinas) e distribuição de `tipo_item` por curso.
-  Ex.: SI/2026 tem DCG de 420 h sem lista — é o maior risco de modelagem.
+### ✅ Fase 2 — árvores curriculares (concluída)
 
-Volume: ~150 requests pesados (~3–5 s, ~300 KB cada) ≈ 15–20 min.
+Comando: `python -m ufsm_speedrun curriculos` (148 versões selecionadas)
+
+Resultado real:
+- 148/148 versões, 0 erros
+- **1.574** nós de estrutura, **2.367** atividades, **12.313** ofertas de disciplina
+- **8.259** disciplinas distintas
+- 39 MB, 662 s
+
+Distribuição das ofertas: 6.968 obrigatórias, 4.884 DCG, 426 eletivas, 16 optativas,
+14 DCG de pós, 3 atividades, 2 inativas.
+
+Checkpoint dos buckets abertos: 245 cotas fechadas por atividades complementares e
+**21 cotas realmente abertas** (sem disciplinas e sem atividades) — ex.: DCG de 420 h
+em Sistemas de Informação/2026 e Engenharia de Transportes e Logística/2023.
 
 ### Fase 3 — pré-requisitos e equivalências
 
@@ -137,21 +159,36 @@ Volume: ~150 requests pesados (~3–5 s, ~300 KB cada) ≈ 15–20 min.
   `POST curso/preRequisitosAgrupados.json` e/ou `.../equivalenciasAgrupadas.json`
 - popular `prereq_bloco`/`prereq_item` e `equivalencia_bloco`/`equivalencia_item`
 - comando: `python -m ufsm_speedrun relacoes`
-- **checkpoint**: % de disciplinas com prereq por curso (esperado 0–20%) e
-  decisão sobre complementar com PPCs em PDF
+- **retomável**: reprocessar é barato (cache), e falha não grava nada
 
-Volume: ~1–2 mil requests rápidos ≈ 30–45 min.
+Volume real: **6.031 ofertas** com alguma relação → ~7,2 mil requests rápidos
+(≈0,1 s) ≈ **3,5 h** a 1,75 s.
 
 ### Fase 4 — ementas
 
-- catálogo único de códigos (estimativa: 3–4 mil)
+- catálogo único de códigos: **8.259** (não 3–4 mil como estimado)
 - `POST disciplina/disciplina.json` por código
 - normalizar HTML → texto; separar `programa_texto` (tipo 2, recursivo) de
   `bibliografia_texto` (tipo 1); guardar `objetivos_html` bruto
-- comando: `python -m ufsm_speedrun ementas`
-- **checkpoint**: nº de disciplinas sem programa (esperado: algumas)
+- comando: `python -m ufsm_speedrun ementas` (pula quem já tem `raw_file`)
+- **checkpoint**: nº de disciplinas sem programa (varia muito: amostra deu 2/3 sem)
 
-Volume: ~3–4 mil requests (~0,1 s, ~6 KB) ≈ 2–3 h. É o gargalo.
+Volume real: 8.259 requests (~0,1 s, ~6 KB) ≈ **4 h** a 1,75 s. É o gargalo.
+
+### Estado do banco (2026-10-28)
+
+| tabela | linhas |
+|---|---|
+| `curso` | 148 |
+| `versao_curriculo` | 528 (148 com `selecionada=1`) |
+| `estrutura` | 1.574 |
+| `estrutura_atividade` | 2.367 |
+| `disciplina` | 8.259 (só 3 com ementa — Fase 4 pendente) |
+| `disciplina_curriculo` | 12.313 |
+| `prereq_*` / `equivalencia_*` | parciais (amostra de 6 ofertas) |
+
+Pendente para fechar a coleta: `relacoes` (~3,5 h) + `ementas` (~4 h) a 1,75 s.
+Com `--delay 0.8` cai para ~1,6 h + ~1,9 h. Ambos são retomáveis.
 
 ### Fase 5 — ETL e validação
 
@@ -269,8 +306,10 @@ Cole isto:
 Projeto em C:\Users\Rodrigo\pessoal\projetos\ufsm-speedrun
 Leia docs/plano.md e docs/ufsm-api.md antes de qualquer coisa.
 Ambiente: .venv (Python 3.12). Rodar: .\.venv\Scripts\python.exe -m ufsm_speedrun <cmd>
-Estado: Fase <N> concluída. Próximo passo: <fase>.
-Regras: toda request passa por UfsmClient; raw em data/raw; ETL nunca faz request.
+Estado: fases 0,1,2 concluídas; 3 e 4 implementadas (crawl longo pendente).
+Comandos: init-db | smoke | discover | curriculos | relacoes | ementas | tudo | stats
+Regras: toda request passa por UfsmClient; raw em data/raw; ETL nunca faz request;
+        nunca commitar data/; commits no formato "fase<N>: <descrição>".
 ```
 
 ## 10. Riscos

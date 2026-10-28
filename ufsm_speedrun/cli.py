@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
-from . import config, db, endpoints
+from . import config, curriculos, db, discover, ementas, endpoints, relacoes
 from .http import UfsmClient
 
 VERSAO_DEMO = "104760"  # Ciência da Computação, currículo 2024
@@ -90,6 +91,156 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_discover(args: argparse.Namespace) -> int:
+    from .recorder import utc_now
+
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+
+    client = UfsmClient(min_interval=args.delay, refresh=args.refresh,
+                        verbose=not args.quiet)
+
+    conn = db.connect()
+    cur = conn.execute(
+        "INSERT INTO ingest_run (fase, iniciado_em, raw_dir) VALUES (?, ?, ?)",
+        ("discover", utc_now(), str(config.RAW_DIR)),
+    )
+    run_id = cur.lastrowid
+    conn.commit()
+
+    inicio = time.monotonic()
+    try:
+        descoberta = discover.discover(client, limit=args.limit)
+        por_curso = discover.persist(conn, descoberta)
+        discover.relatorio(conn, descoberta, por_curso)
+        duracao = time.monotonic() - inicio
+        conn.execute(
+            "UPDATE ingest_run SET finalizado_em = ?, observacoes = ? WHERE id = ?",
+            (utc_now(), f"{client.stats.summary()} em {duracao:.0f}s", run_id),
+        )
+        conn.commit()
+        print(f"  estatísticas: {client.stats.summary()} em {duracao:.0f}s\n")
+        return 0 if not descoberta.erros else 2
+    finally:
+        conn.close()
+
+
+def cmd_curriculos(args: argparse.Namespace) -> int:
+    from .recorder import utc_now
+
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+
+    conn = db.connect()
+    client = UfsmClient(min_interval=args.delay, refresh=args.refresh,
+                        verbose=not args.quiet)
+
+    run_id = conn.execute(
+        "INSERT INTO ingest_run (fase, iniciado_em, raw_dir) VALUES (?, ?, ?)",
+        ("curriculos", utc_now(), str(config.RAW_DIR)),
+    ).lastrowid
+    conn.commit()
+
+    inicio = time.monotonic()
+    try:
+        coleta = curriculos.run(client, conn, todas=args.todas, limit=args.limit)
+        curriculos.relatorio(conn, coleta)
+        duracao = time.monotonic() - inicio
+        conn.execute(
+            "UPDATE ingest_run SET finalizado_em = ?, observacoes = ? WHERE id = ?",
+            (utc_now(), f"{client.stats.summary()} em {duracao:.0f}s", run_id),
+        )
+        conn.commit()
+        print(f"  estatísticas: {client.stats.summary()} em {duracao:.0f}s\n")
+        return 0 if not coleta.erros else 2
+    finally:
+        conn.close()
+
+
+def cmd_relacoes(args: argparse.Namespace) -> int:
+    from .recorder import utc_now
+
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+
+    conn = db.connect()
+    client = UfsmClient(min_interval=args.delay, refresh=args.refresh,
+                        verbose=not args.quiet)
+    run_id = conn.execute(
+        "INSERT INTO ingest_run (fase, iniciado_em, raw_dir) VALUES (?, ?, ?)",
+        ("relacoes", utc_now(), str(config.RAW_DIR)),
+    ).lastrowid
+    conn.commit()
+
+    inicio = time.monotonic()
+    try:
+        coleta = relacoes.run(client, conn, limit=args.limit)
+        relacoes.relatorio(conn, coleta)
+        duracao = time.monotonic() - inicio
+        conn.execute(
+            "UPDATE ingest_run SET finalizado_em = ?, observacoes = ? WHERE id = ?",
+            (utc_now(), f"{client.stats.summary()} em {duracao:.0f}s", run_id),
+        )
+        conn.commit()
+        print(f"  estatísticas: {client.stats.summary()} em {duracao:.0f}s\n")
+        return 0 if not coleta.erros else 2
+    finally:
+        conn.close()
+
+
+def cmd_ementas(args: argparse.Namespace) -> int:
+    from .recorder import utc_now
+
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+
+    conn = db.connect()
+    client = UfsmClient(min_interval=args.delay, refresh=args.refresh,
+                        verbose=not args.quiet)
+    run_id = conn.execute(
+        "INSERT INTO ingest_run (fase, iniciado_em, raw_dir) VALUES (?, ?, ?)",
+        ("ementas", utc_now(), str(config.RAW_DIR)),
+    ).lastrowid
+    conn.commit()
+
+    inicio = time.monotonic()
+    try:
+        coleta = ementas.run(client, conn, limit=args.limit, refazer=args.refazer)
+        ementas.relatorio(conn, coleta)
+        duracao = time.monotonic() - inicio
+        conn.execute(
+            "UPDATE ingest_run SET finalizado_em = ?, observacoes = ? WHERE id = ?",
+            (utc_now(), f"{client.stats.summary()} em {duracao:.0f}s", run_id),
+        )
+        conn.commit()
+        print(f"  estatísticas: {client.stats.summary()} em {duracao:.0f}s\n")
+        return 0 if not coleta.erros else 2
+    finally:
+        conn.close()
+
+
+def cmd_tudo(args: argparse.Namespace) -> int:
+    """Roda o pipeline inteiro em sequência (retomável: o cache evita refazer)."""
+    etapas = [
+        ("discover", cmd_discover),
+        ("curriculos", cmd_curriculos),
+        ("relacoes", cmd_relacoes),
+        ("ementas", cmd_ementas),
+    ]
+    pior = 0
+    for nome, funcao in etapas:
+        print(f"\n{'#' * 72}\n# {nome.upper()}\n{'#' * 72}")
+        codigo = funcao(args)
+        if codigo == 1:  # erro fatal (ex.: banco ausente)
+            return codigo
+        pior = max(pior, codigo)
+    return pior
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -130,6 +281,48 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"intervalo minimo entre requests (padrao {config.MIN_INTERVAL}s)")
     p.add_argument("--quiet", action="store_true")
     p.set_defaults(func=cmd_smoke)
+
+    p = sub.add_parser("discover", help="fase 1: descobre cursos e versões de currículo")
+    p.add_argument("--limit", type=int, default=None, help="limita o nº de páginas (teste)")
+    p.add_argument("--refresh", action="store_true", help="ignora o cache e refaz as chamadas")
+    p.add_argument("--delay", type=float, default=config.MIN_INTERVAL,
+                   help=f"intervalo minimo entre requests (padrao {config.MIN_INTERVAL}s)")
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_discover)
+
+    p = sub.add_parser("curriculos", help="fase 2: coleta as árvores curriculares")
+    p.add_argument("--todas", action="store_true",
+                   help="inclui versões históricas (Ativa/Inativa), não só as selecionadas")
+    p.add_argument("--limit", type=int, default=None, help="limita o nº de versões (teste)")
+    p.add_argument("--refresh", action="store_true", help="ignora o cache e refaz as chamadas")
+    p.add_argument("--delay", type=float, default=config.MIN_INTERVAL,
+                   help=f"intervalo minimo entre requests (padrao {config.MIN_INTERVAL}s)")
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_curriculos)
+
+    p = sub.add_parser("relacoes", help="fase 3: pré-requisitos e equivalências")
+    p.add_argument("--limit", type=int, default=None, help="limita o nº de ofertas (teste)")
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--delay", type=float, default=config.MIN_INTERVAL)
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_relacoes)
+
+    p = sub.add_parser("ementas", help="fase 4: baixa o programa/ementa de cada disciplina")
+    p.add_argument("--limit", type=int, default=None, help="limita o nº de disciplinas (teste)")
+    p.add_argument("--refazer", action="store_true", help="refaz mesmo as já baixadas")
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--delay", type=float, default=config.MIN_INTERVAL)
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_ementas)
+
+    p = sub.add_parser("tudo", help="roda o pipeline completo (retomável)")
+    p.add_argument("--limit", type=int, default=None, help="limita cada fase (teste rápido)")
+    p.add_argument("--todas", action="store_true", help="fase 2 inclui versões históricas")
+    p.add_argument("--refazer", action="store_true", help="fase 4 refaz mesmo as já baixadas")
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--delay", type=float, default=config.MIN_INTERVAL)
+    p.add_argument("--quiet", action="store_true")
+    p.set_defaults(func=cmd_tudo)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)
