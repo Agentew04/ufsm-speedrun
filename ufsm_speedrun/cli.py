@@ -258,6 +258,31 @@ def cmd_stats(args: argparse.Namespace) -> int:
         print(f"\n== banco ({db_path.name}, {_human(db_path.stat().st_size)}) ==")
         for tabela, n in db.counts(db_path).items():
             print(f"  {tabela:<24} {n:>6}")
+
+        conn = db.connect(db_path)
+        try:
+            sem_ementa = conn.execute(
+                "SELECT COUNT(*) FROM disciplina WHERE raw_file IS NULL"
+            ).fetchone()[0]
+            total_disc = conn.execute("SELECT COUNT(*) FROM disciplina").fetchone()[0]
+            ofertas_rel = conn.execute(
+                "SELECT COUNT(*) FROM disciplina_curriculo WHERE tem_prereq = 1 OR tem_equiv = 1"
+            ).fetchone()[0]
+            com_blocos = conn.execute(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT disciplina_curriculo_id FROM prereq_bloco
+                    UNION SELECT disciplina_curriculo_id FROM equivalencia_bloco
+                )
+                """
+            ).fetchone()[0]
+            print("\n== faltando para concluir a coleta ==")
+            print(f"  fase 3: {ofertas_rel - com_blocos} ofertas sem relação gravada "
+                  f"(de {ofertas_rel}; reprocessar usa cache, não rede)")
+            print(f"  fase 4: {sem_ementa} disciplinas sem ementa baixada "
+                  f"(de {total_disc})")
+        finally:
+            conn.close()
     else:
         print(f"\n  banco ainda não existe ({db_path}) — rode: init-db")
     return 0

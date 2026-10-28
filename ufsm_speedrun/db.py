@@ -32,6 +32,11 @@ def connect(db_path: Path = config.DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Durabilidade: com WAL, synchronous=NORMAL pode perder os últimos commits
+    # num corte de energia. FULL fsync-a o WAL a cada commit — e como commitamos
+    # por item (1 request), o custo é irrelevante.
+    conn.execute("PRAGMA synchronous = FULL")
+    conn.execute("PRAGMA busy_timeout = 10000")
     return conn
 
 

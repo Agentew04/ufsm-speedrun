@@ -39,11 +39,13 @@ class Stats:
     cache_hits: int = 0
     bytes_downloaded: int = 0
     retries: int = 0
+    penalties: int = 0
     errors: int = 0
 
     def summary(self) -> str:
+        extra = f" penalidades={self.penalties}" if self.penalties else ""
         return (f"rede={self.network_calls} cache={self.cache_hits} "
-                f"retries={self.retries} erros={self.errors} "
+                f"retries={self.retries}{extra} erros={self.errors} "
                 f"baixado={self.bytes_downloaded / 1024 / 1024:.1f} MB")
 
 
@@ -82,6 +84,8 @@ class UfsmClient:
         self.verbose = verbose
         self.stats = Stats()
         self._last_call_at: float | None = None
+        self.base_interval = min_interval
+        self._ok_streak = 0
 
     # ------------------------------------------------------------------ utils
     def _log(self, msg: str) -> None:
@@ -96,6 +100,33 @@ class UfsmClient:
         remaining = self.min_interval + random.uniform(0.0, 0.35) - elapsed
         if remaining > 0:
             time.sleep(remaining)
+
+    def _aplicar_penalidade(self, motivo: str) -> None:
+        """Se o servidor reclamar, afrouxa o ritmo — e não volta atrás sozinho.
+
+        O usuário autorizou acelerar (--delay 0.8), mas qualquer sinal de
+        penalidade/sobrecarga faz o cliente voltar para um ritmo mais lento.
+        """
+        novo = min(max(self.min_interval * 1.6, config.MIN_INTERVAL), 12.0)
+        self._ok_streak = 0
+        if novo > self.min_interval:
+            self.min_interval = novo
+            self.stats.penalties += 1
+            self._log(f"  !! penalidade ({motivo}): ritmo reduzido para {novo:.2f}s/request")
+
+    def _registrar_sucesso(self) -> None:
+        """Recupera o ritmo lentamente após uma sequência limpa.
+
+        Penalidade abaixa o ritmo na hora; só voltamos ao `--delay` original
+        depois de 200 requests consecutivos sem problema — nunca por conta própria
+        logo depois de um 429/503.
+        """
+        self._ok_streak += 1
+        if self._ok_streak >= 200 and self.min_interval > self.base_interval:
+            novo = max(self.base_interval, self.min_interval / 1.6)
+            self.min_interval = novo
+            self._ok_streak = 0
+            self._log(f"  ritmo recuperado para {novo:.2f}s/request (200 requests ok)")
 
     # -------------------------------------------------------------- atalhos
     def call(self, endpoint: str, params: dict[str, Any] | None = None,
@@ -134,6 +165,7 @@ class UfsmClient:
                     "method": method, "url": url, "params": params,
                     "from_cache": True, "status": envelope["response"]["status"],
                     "bytes": envelope["response"]["bytes"], "elapsed_ms": 0,
+                    "penalties": self.stats.penalties,
                 })
                 cached_body = envelope["response"]["body"]
                 data = json.loads(cached_body) if parse_json else cached_body
@@ -174,6 +206,7 @@ class UfsmClient:
                 self._last_call_at = time.monotonic()
                 self.stats.network_calls += 1
                 self.stats.bytes_downloaded += len(raw)
+                self._registrar_sucesso()
 
                 envelope = build_envelope(
                     method=method, url=url, params=params, request_headers=request_headers,
@@ -187,6 +220,7 @@ class UfsmClient:
                     "bytes": len(raw), "elapsed_ms": elapsed_ms, "attempts": attempt,
                     "raw_file": str(path.relative_to(config.DATA_DIR)),
                     "body_sha256": envelope["response"]["body_sha256"],
+                    "penalties": self.stats.penalties,
                 })
 
                 self._log(f"  [{self.stats.network_calls:>3}] {endpoint[:52]:<52} "
@@ -204,6 +238,8 @@ class UfsmClient:
                 self._last_call_at = time.monotonic()
                 last_error = exc
                 self.stats.errors += 1
+                if exc.code in (429, 500, 502, 503, 504):
+                    self._aplicar_penalidade(f"HTTP {exc.code}")
                 if exc.code in (429, 500, 502, 503, 504) and attempt < self.max_attempts:
                     wait = config.BACKOFF_BASE * (2 ** (attempt - 1))
                     self.stats.retries += 1
@@ -217,6 +253,7 @@ class UfsmClient:
                 self._last_call_at = time.monotonic()
                 last_error = exc
                 self.stats.errors += 1
+                self._aplicar_penalidade("timeout/rede")
                 if attempt < self.max_attempts:
                     wait = config.BACKOFF_BASE * (2 ** (attempt - 1))
                     self.stats.retries += 1

@@ -77,7 +77,10 @@ class Recorder:
         path = self.raw_path(endpoint, key)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(envelope, ensure_ascii=False), encoding="utf-8")
+        with tmp.open("w", encoding="utf-8") as fh:
+            fh.write(json.dumps(envelope, ensure_ascii=False))
+            fh.flush()
+            os.fsync(fh.fileno())  # garante o conteúdo no disco antes do rename
         os.replace(tmp, path)  # atômico: nunca deixa arquivo pela metade
         return path
 
@@ -87,6 +90,8 @@ class Recorder:
         line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
         with self.log_path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
 
     # ---------------------------------------------------------- estatísticas
     def count_raw(self) -> int:
