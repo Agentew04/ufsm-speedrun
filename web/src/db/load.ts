@@ -1,0 +1,419 @@
+import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js'
+import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import type {
+  CourseModel,
+  Curso,
+  EquivItem,
+  Estrutura,
+  Oferta,
+  PrereqBloco,
+  Quota,
+  Universe,
+  Versao,
+} from './types'
+
+let sqlPromise: Promise<SqlJsStatic> | null = null
+
+function getSql(): Promise<SqlJsStatic> {
+  if (!sqlPromise) {
+    sqlPromise = initSqlJs({ locateFile: () => wasmUrl })
+  }
+  return sqlPromise
+}
+
+export const DB_MAGIC = 'SQLite format 3'
+
+export async function openDatabase(bytes: ArrayBuffer): Promise<Database> {
+  const SQL = await getSql()
+  return new SQL.Database(new Uint8Array(bytes))
+}
+
+function q<T extends Record<string, unknown>>(db: Database, sql: string): T[] {
+  const res = db.exec(sql)
+  if (!res.length) return []
+  const { columns, values } = res[0]
+  return values.map((value) => {
+    const row: Record<string, unknown> = {}
+    columns.forEach((col, i) => {
+      row[col] = value[i]
+    })
+    return row as T
+  })
+}
+
+const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0)
+const optNum = (v: unknown): number | null => (v === null || v === undefined ? null : num(v))
+const str = (v: unknown): string => (v === null || v === undefined ? '' : String(v))
+const optStr = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+
+export interface LoadProgress {
+  label: string
+}
+
+/**
+ * Monta o universo em memória a partir do banco. Uma passada por tabela.
+ * Tolerante a tabelas ainda vazias (a coleta pode estar em andamento).
+ */
+export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => void): Universe {
+  onProgress?.({ label: 'lendo cursos' })
+  const cursos = q<{
+    id: number
+    nome: string
+    campus: string | null
+    modalidade: string | null
+    grau: string | null
+    classificacao: string | null
+  }>(db, 'SELECT id, nome, campus, modalidade, grau, classificacao FROM curso ORDER BY nome')
+
+  const versoes = q<Record<string, unknown>>(
+    db,
+    `SELECT id, curso_id, ano, numero, ch_total, ch_min_periodo, ch_max_periodo,
+            periodo_ideal, tipo_periodo
+       FROM versao_curriculo WHERE selecionada = 1`,
+  )
+
+  onProgress?.({ label: 'lendo estruturas' })
+  const estruturas = q<Record<string, unknown>>(
+    db,
+    `SELECT e.id, e.versao_id, e.pai_id, e.descricao, e.ch_minima, e.ordem
+       FROM estrutura e
+       JOIN versao_curriculo v ON v.id = e.versao_id
+      WHERE v.selecionada = 1
+      ORDER BY e.ordem IS NULL, e.ordem, e.id`,
+  )
+
+  onProgress?.({ label: 'lendo ofertas' })
+  const ofertasRaw = q<Record<string, unknown>>(
+    db,
+    `SELECT dc.id, dc.versao_id, dc.estrutura_id, dc.disciplina_id, dc.tipo_item,
+            dc.periodo_ideal, dc.tem_prereq, dc.tem_equiv,
+            d.codigo, d.nome, d.ch_total, d.creditos
+       FROM disciplina_curriculo dc
+       JOIN disciplina d ON d.id = dc.disciplina_id
+       JOIN versao_curriculo v ON v.id = dc.versao_id
+      WHERE v.selecionada = 1`,
+  )
+
+  onProgress?.({ label: 'lendo pré-requisitos' })
+  const prereqRaw = q<Record<string, unknown>>(
+    db,
+    `SELECT pb.disciplina_curriculo_id AS dc_id, pb.id AS bloco_id, pi.tipo_item,
+            pi.disciplina_req_id, pi.disciplina_req_codigo, pi.numero_referencia
+       FROM prereq_bloco pb
+       JOIN prereq_item pi ON pi.bloco_id = pb.id`,
+  )
+
+  const equivRaw = q<Record<string, unknown>>(
+    db,
+    `SELECT eb.disciplina_curriculo_id AS dc_id, eb.id AS bloco_id,
+            ei.disciplina_req_id, ei.disciplina_req_codigo
+       FROM equivalencia_bloco eb
+       JOIN equivalencia_item ei ON ei.bloco_id = eb.id`,
+  )
+
+  const meta = q<Record<string, unknown>>(
+    db,
+    `SELECT (SELECT COUNT(*) FROM curso) AS cursos,
+            (SELECT COUNT(*) FROM versao_curriculo WHERE selecionada = 1) AS versoes,
+            (SELECT COUNT(*) FROM disciplina_curriculo) AS ofertas,
+            (SELECT COUNT(*) FROM disciplina) AS disciplinas,
+            (SELECT COUNT(*) FROM disciplina_curriculo WHERE tem_prereq = 1) AS com_prereq,
+            (SELECT COUNT(*) FROM disciplina_curriculo WHERE tem_equiv = 1) AS com_equiv,
+            (SELECT COUNT(*) FROM disciplina WHERE programa_texto IS NOT NULL) AS com_ementa`,
+  )[0] ?? {}
+
+  // índice código -> id (prereq/equiv às vezes só trazem o código)
+  const discById = new Map<number, { id: number; codigo: string; nome: string; ch: number }>()
+  const discByCodigo = new Map<string, number>()
+  for (const o of ofertasRaw) {
+    const id = num(o.disciplina_id)
+    if (!discById.has(id)) {
+      const d = {
+        id,
+        codigo: str(o.codigo),
+        nome: str(o.nome),
+        ch: num(o.ch_total),
+      }
+      discById.set(id, d)
+      if (d.codigo) discByCodigo.set(d.codigo, id)
+    }
+  }
+
+  const versaoByCurso = new Map<number, Versao>()
+  for (const v of versoes) {
+    const cursoId = num(v.curso_id)
+    versaoByCurso.set(cursoId, {
+      id: num(v.id),
+      cursoId,
+      ano: optNum(v.ano),
+      numero: optStr(v.numero),
+      chTotal: optNum(v.ch_total),
+      chMinPeriodo: optNum(v.ch_min_periodo),
+      chMaxPeriodo: optNum(v.ch_max_periodo),
+      periodoIdeal: optNum(v.periodo_ideal),
+      tipoPeriodo: optStr(v.tipo_periodo),
+    })
+  }
+
+  const estruturasByVersao = new Map<number, Estrutura[]>()
+  for (const e of estruturas) {
+    const item: Estrutura = {
+      id: num(e.id),
+      versaoId: num(e.versao_id),
+      paiId: optNum(e.pai_id),
+      descricao: str(e.descricao),
+      chMinima: optNum(e.ch_minima),
+      ordem: optNum(e.ordem),
+    }
+    const list = estruturasByVersao.get(item.versaoId)
+    if (list) list.push(item)
+    else estruturasByVersao.set(item.versaoId, [item])
+  }
+
+  const ofertasByVersao = new Map<number, Oferta[]>()
+  for (const o of ofertasRaw) {
+    const oferta: Oferta = {
+      id: num(o.id),
+      versaoId: num(o.versao_id),
+      estruturaId: num(o.estrutura_id),
+      discId: num(o.disciplina_id),
+      tipoItem: num(o.tipo_item),
+      periodo: num(o.periodo_ideal),
+      ch: num(o.ch_total),
+      creditos: optNum(o.creditos),
+      codigo: str(o.codigo),
+      nome: str(o.nome),
+      temPrereq: num(o.tem_prereq) === 1,
+      temEquiv: num(o.tem_equiv) === 1,
+    }
+    const list = ofertasByVersao.get(oferta.versaoId)
+    if (list) list.push(oferta)
+    else ofertasByVersao.set(oferta.versaoId, [oferta])
+  }
+
+  // pré-requisitos por oferta
+  const prereqByDc = new Map<number, PrereqBloco[]>()
+  const blocosIndex = new Map<string, PrereqBloco>()
+  for (const p of prereqRaw) {
+    const dcId = num(p.dc_id)
+    const blocoId = num(p.bloco_id)
+    let blocos = prereqByDc.get(dcId)
+    if (!blocos) {
+      blocos = []
+      prereqByDc.set(dcId, blocos)
+    }
+    const key = `${dcId}:${blocoId}`
+    let bloco = blocosIndex.get(key)
+    if (!bloco) {
+      bloco = { itens: [] }
+      blocosIndex.set(key, bloco)
+      blocos.push(bloco)
+    }
+    const discId = optNum(p.disciplina_req_id)
+    const codigo = optStr(p.disciplina_req_codigo)
+    bloco.itens.push({
+      tipo: num(p.tipo_item),
+      discId: discId ?? (codigo ? (discByCodigo.get(codigo) ?? null) : null),
+      codigo,
+      numero: optNum(p.numero_referencia),
+    })
+  }
+
+  const equivByDc = new Map<number, EquivItem[]>()
+  for (const e of equivRaw) {
+    const dcId = num(e.dc_id)
+    const codigo = optStr(e.disciplina_req_codigo)
+    const item: EquivItem = {
+      discId: optNum(e.disciplina_req_id) ?? (codigo ? (discByCodigo.get(codigo) ?? null) : null),
+      codigo,
+    }
+    const list = equivByDc.get(dcId)
+    if (list) list.push(item)
+    else equivByDc.set(dcId, [item])
+  }
+
+  onProgress?.({ label: 'montando currículos' })
+  const models: CourseModel[] = []
+  for (const c of cursos) {
+    const versao = versaoByCurso.get(c.id)
+    if (!versao) continue
+    const estruturasDoCurso = estruturasByVersao.get(versao.id) ?? []
+    const ofertas = ofertasByVersao.get(versao.id) ?? []
+    const model = buildCourse(
+      {
+        id: c.id,
+        nome: str(c.nome),
+        campus: optStr(c.campus),
+        modalidade: optStr(c.modalidade),
+        grau: optStr(c.grau),
+        classificacao: optStr(c.classificacao),
+      },
+      versao,
+      estruturasDoCurso,
+      ofertas,
+      prereqByDc,
+      equivByDc,
+    )
+    models.push(model)
+  }
+
+  const cursosByDisc = new Map<number, number[]>()
+  for (const m of models) {
+    for (const oferta of m.ofertas) {
+      const list = cursosByDisc.get(oferta.discId)
+      if (list) {
+        if (list[list.length - 1] !== m.curso.id) list.push(m.curso.id)
+      } else {
+        cursosByDisc.set(oferta.discId, [m.curso.id])
+      }
+    }
+  }
+
+  return {
+    cursos: models,
+    byCurso: new Map(models.map((m) => [m.curso.id, m])),
+    disciplinas: discById,
+    cursosByDisc,
+    meta: {
+      cursos: num(meta.cursos),
+      versoes: num(meta.versoes),
+      ofertas: num(meta.ofertas),
+      disciplinas: num(meta.disciplinas),
+      comPrereq: num(meta.com_prereq),
+      comEquiv: num(meta.com_equiv),
+      comEmenta: num(meta.com_ementa),
+    },
+  }
+}
+
+function buildCourse(
+  curso: Curso,
+  versao: Versao,
+  estruturas: Estrutura[],
+  ofertas: Oferta[],
+  prereqByDc: Map<number, PrereqBloco[]>,
+  equivByDc: Map<number, EquivItem[]>,
+): CourseModel {
+  const byDisc = new Map<number, Oferta>()
+  for (const o of ofertas) {
+    const prev = byDisc.get(o.discId)
+    if (!prev || (prev.tipoItem !== 1 && o.tipoItem === 1)) byDisc.set(o.discId, o)
+  }
+
+  // Obrigatórias: tipo 1. Dedup por disciplina (mesma cadeira em 2 núcleos).
+  const fixed: Oferta[] = []
+  const fixedIds = new Set<number>()
+  for (const o of ofertas) {
+    if (o.tipoItem !== 1) continue
+    if (fixedIds.has(o.discId)) continue
+    fixedIds.add(o.discId)
+    fixed.push(o)
+  }
+  fixed.sort((a, b) => a.periodo - b.periodo || a.codigo.localeCompare(b.codigo))
+  const fixedHoras = fixed.reduce((s, o) => s + o.ch, 0)
+
+  // CH de obrigatórias por estrutura (para medir o déficit de cada cota)
+  const fixedChByEstrutura = new Map<number, number>()
+  const seenFixed = new Set<number>()
+  for (const o of ofertas) {
+    if (o.tipoItem !== 1) continue
+    if (seenFixed.has(o.discId)) continue
+    seenFixed.add(o.discId)
+    fixedChByEstrutura.set(o.estruturaId, (fixedChByEstrutura.get(o.estruturaId) ?? 0) + o.ch)
+  }
+
+  const estruturaById = new Map(estruturas.map((e) => [e.id, e]))
+  const hasQuotaAncestor = (e: Estrutura): boolean => {
+    let pai = e.paiId ? estruturaById.get(e.paiId) : undefined
+    let guard = 0
+    while (pai && guard++ < 32) {
+      if ((pai.chMinima ?? 0) > 0) return true
+      pai = pai.paiId ? estruturaById.get(pai.paiId) : undefined
+    }
+    return false
+  }
+
+  const quotas: Quota[] = []
+  let atividadesHoras = 0
+  for (const e of estruturas) {
+    const minima = e.chMinima ?? 0
+    if (minima <= 0) continue
+    if (hasQuotaAncestor(e)) continue
+    const deficit = minima - (fixedChByEstrutura.get(e.id) ?? 0)
+    if (deficit <= 0) continue
+
+    const daEstrutura = ofertas.filter((o) => o.estruturaId === e.id)
+    const candidatos = daEstrutura
+      .filter((o) => o.tipoItem === 2 || o.tipoItem === 3 || o.tipoItem === 5 || o.tipoItem === 7)
+      .map((o) => o.discId)
+    // DCG = qualquer disciplina do catálogo; já optativa/eletiva de núcleo é um
+    // menu fechado (só vale o que está listado).
+    const temDcg = daEstrutura.some((o) => o.tipoItem === 5 || o.tipoItem === 7)
+    const atividades = daEstrutura.filter((o) => o.tipoItem === 4 || o.tipoItem === 8)
+    const pareceAtividade = /atividad|extens/i.test(e.descricao)
+
+    if (atividades.length === 0 && candidatos.length === 0 && pareceAtividade) {
+      atividadesHoras += deficit
+      quotas.push({
+        estruturaId: e.id,
+        descricao: e.descricao,
+        horas: deficit,
+        kind: 'atividade',
+        candidatos: [],
+      })
+      continue
+    }
+
+    quotas.push({
+      estruturaId: e.id,
+      descricao: e.descricao,
+      horas: deficit,
+      kind: temDcg ? 'dcg' : candidatos.length ? 'eletiva' : 'livre',
+      candidatos,
+    })
+  }
+  quotas.sort((a, b) => b.horas - a.horas)
+
+  // CH por semestre: usa o máximo oficial; senão a mediana do que está listado.
+  const porPeriodo = new Map<number, number>()
+  for (const o of fixed) {
+    if (o.periodo >= 99) continue
+    porPeriodo.set(o.periodo, (porPeriodo.get(o.periodo) ?? 0) + o.ch)
+  }
+  const cargas = [...porPeriodo.values()].sort((a, b) => a - b)
+  const mediana = cargas.length ? cargas[Math.floor(cargas.length / 2)] : 0
+  const cargaSemestre = versao.chMaxPeriodo && versao.chMaxPeriodo > 0
+    ? versao.chMaxPeriodo
+    : mediana || 480
+
+  const semestres = Math.max(
+    versao.periodoIdeal ?? 0,
+    ...[...porPeriodo.keys(), 0],
+  ) || Math.ceil((versao.chTotal ?? fixedHoras) / cargaSemestre)
+
+  const prereqs = new Map<number, PrereqBloco[]>()
+  const equivals = new Map<number, EquivItem[]>()
+  for (const o of ofertas) {
+    const p = prereqByDc.get(o.id)
+    if (p) prereqs.set(o.discId, p)
+    const e = equivByDc.get(o.id)
+    if (e) equivals.set(o.discId, e)
+  }
+
+  return {
+    curso,
+    versao,
+    estruturas,
+    ofertas,
+    fixed,
+    fixedIds,
+    fixedHoras,
+    quotas,
+    atividadesHoras,
+    cargaSemestre,
+    semestres,
+    byDisc,
+    prereqs,
+    equivals,
+  }
+}

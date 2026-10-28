@@ -1,0 +1,133 @@
+# Dashboard — decisões, algoritmo e limites
+
+> Frente **(B) frontend**. Contrato de dados em `docs/frontend-contrato.md`.
+> Este documento registra o que foi decidido na implementação e por quê.
+> Última atualização: 2026-10-28.
+
+## 1. Decisão de arquitetura: tudo no cliente
+
+`docs/plano.md` §8 previa FastAPI + Jinja2. A implementação seguiu outro
+caminho, por decisão de produto: **o usuário baixa o `ufsm.db` e o site roda
+sozinho**.
+
+- `sql.js` (SQLite compilado para WebAssembly) abre o arquivo escolhido
+  (`<input type=file>`, drag & drop ou `./ufsm.db` ao lado da página).
+- O banco vira estruturas em memória uma única vez (~12 mil ofertas; leitura
+  completa em poucas centenas de ms).
+- Nenhuma query no servidor, nenhuma request para a UFSM. O site é estático
+  (`dist/`) e funciona offline.
+- Nada é escrito no banco: a `Database` do sql.js é uma cópia em memória.
+
+Consequência prática: o deploy é arrastar `dist/` para qualquer host (ou abrir
+com um servidor estático local). O único cuidado é o WAL — use
+`web/scripts/snapshot-db.py`, que copia via backup API do SQLite.
+
+## 2. Modelo em memória
+
+```
+Universe
+├ cursos: CourseModel[148]
+│  ├ curso, versao (selecionada=1)
+│  ├ ofertas (todas as 12.313, agrupadas por versão)
+│  ├ fixed: obrigatórias (tipo_item = 1), deduplicadas por disciplina
+│  ├ quotas: núcleos com ch_minima > obrigatórias do núcleo
+│  ├ prereqs/equivals: por disciplina (LEFT JOIN tolerante a dado parcial)
+│  └ cargaSemestre: ch_max_periodo (ou mediana observada)
+└ cursosByDisc: disciplina -> cursos que a listam
+```
+
+Pontos que exigiram cuidado:
+
+1. **Hierarquia de `estrutura`** (`pai_id`): se um ancestral já tem cota
+   (`ch_minima > 0`), a cota do filho não é contada de novo — senão o déficit
+   dobrava em cursos como Jornalismo/FW.
+2. **Mesma disciplina em dois núcleos** da mesma versão: a CH entra uma vez só.
+3. **Cotas** — três tipos, com semânticas diferentes:
+   - `dcg`: o núcleo tem ofertas `tipo_item = 5/7`. DCG, por definição, aceita
+     qualquer disciplina do catálogo → o histórico do aluno (inclusive as horas
+     de DCG do curso de origem) preenche a cota.
+   - `eletiva`: o núcleo lista optativas/eletivas (tipo 2/3) e **só elas**
+     valem. Sem isso, qualquer curso com muito "núcleo flexível" ficava
+     artificialmente barato.
+   - `livre`: cota sem nenhuma disciplina listada (as ~21 cotas abertas do
+     relatório de qualidade) → horas de eletiva a escolher, 60 h por cadeira
+     sintética.
+   - `atividade`: atividades complementares/extensão entram como custo à parte,
+     nunca como disciplina nem dentro dos semestres.
+4. **`periodo_ideal = 99`** → "qualquer", coluna própria no grafo e no
+   planejamento.
+
+## 3. Cálculo do custo de um curso-alvo
+
+Entrada: `done` = disciplinas cumpridas + horas de eletiva "sem identidade"
+(as cotas já fechadas do curso de origem, proporcionais ao progresso).
+
+```
+cobertas        = obrigatórias do alvo ∩ done
+por_equivalência = obrigatórias do alvo cujo equivalencia_item aponta para algo em done
+faltam          = obrigatórias - cobertas - por_equivalência
+surplus         = horas livres + CH de done que o alvo não exige
+para cada cota:
+    dcg/livre  -> preenche com surplus
+    eletiva    -> preenche só com candidatas de done que estão na lista
+extra_CH        = CH(faltam) + cotas não preenchidas
+extra_cadeiras  = |faltam| + ceil(cotas_restantes / 60)
+semestres       = tamanho do plano (bin-packing)
+```
+
+**Plano semestral (heurística):** cada disciplina faltante recebe o semestre
+mais cedo possível a partir dos pré-requisitos oficiais (OR entre blocos, AND
+dentro do bloco; pré-requisito fora do currículo-alvo é ignorado). Depois as
+disciplinas são empacotadas em semestres respeitando `cargaSemestre`. Ciclos de
+pré-requisito caem num bloco final em vez de travar.
+
+O bin-packing usa a CH máxima oficial como teto — por isso um curso de 58
+cadeiras pode fechar em ~6 semestres. É uma estimativa otimista e explícita:
+não modela oferta de turma, choque de horário, estágio obrigatório presencial
+nem pré-requisito que a coleta ainda não trouxe.
+
+**Matriz 148×148 (aba Mapa):** mesma conta sem montar o plano
+(`ceil(extra_CH / carga)`), ~22 mil células, calculada em uma passada.
+
+## 4. Equivalência
+
+Usada em dois lugares:
+
+1. **Cobertura**: obrigatória do alvo com `equivalencia_item` apontando para
+   disciplina que o aluno já tem conta como cumprida (badge `equiv`).
+2. **Grafo**: aresta tracejada quando as duas disciplinas estão no mesmo
+   currículo.
+
+A equivalência heurística por ementa (≥ 75%) **não** entra no cálculo — só a
+oficial. Quando a Fase 4 terminar, o caminho natural é a Fase 6a gravar
+`similaridade_ementa` e a UI passar a marcar `via = heuristica` com veredito
+visível.
+
+## 5. UI
+
+- `web/src/db/load.ts` — uma passada por tabela → `Universe`.
+- `web/src/lib/plan.ts` — `makeDone`, `scoreCourse`, `planSemesters`,
+  `rankCourses`, `buildMatrix`, `leverInsights`.
+- `web/src/lib/graph.ts` — grafo de pré-requisitos (colunas por período) e rede
+  bipartida curso ↔ disciplina (só disciplinas compartilhadas por ≥ 3 cursos,
+  top 36 por grau).
+- `web/src/components/*` — DbGate, BasePanel, Ranking, CourseDetail, Graph,
+  Matrix, Metodo.
+- Estado da URL: `#b=<curso>&t=<alvo>&a=<aba>` (compartilhável).
+- `?db=<url>` escolhe outro banco.
+
+## 6. Limites conhecidos (e o que fazer depois)
+
+| limite | impacto | próximo passo |
+|---|---|---|
+| pré-requisitos ~25% das ofertas | plano semestral otimista | nada no front; depende da Fase 3 |
+| equivalência oficial incompleta | reaproveitamento subestimado | depende da Fase 3 |
+| ementas quase vazias | nenhum (ainda não usadas) | Fase 6a + badge na UI |
+| reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | mostrar candidatos por nome/ementa |
+| oferta de turma/horário não modelada | semestres otimistas | integrar horários (não existe no SIE público) |
+| cota restrita usa só o menu do núcleo | pode subestimar equivalência aprovada caso a caso | revisão humana da Fase 6a |
+
+O front é **tolerante a dado parcial**: `LEFT JOIN` em tudo, estados vazios
+explícitos ("a coleta ainda não chegou neste curso"), e o topo mostra a
+porcentagem de ofertas com pré-requisito. Reexportar o banco melhora os números
+sem mexer no código.

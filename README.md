@@ -11,6 +11,7 @@ entre cursos, aproveitando cadeiras e equivalências.
 - ✅ **Fase 2** — 148 currículos: 1.574 núcleos, 12.313 ofertas, 8.259 disciplinas
 - 🚧 **Fase 3** — pré-requisitos e equivalências (implementada, crawl pendente)
 - 🚧 **Fase 4** — ementas (implementada, crawl pendente)
+- ✅ **Fase 7** — dashboard client-side em `web/` (ranking, plano, grafo, mapa)
 
 Plano completo em [docs/plano.md](docs/plano.md) e documentação da API do SIE em
 [docs/ufsm-api.md](docs/ufsm-api.md).

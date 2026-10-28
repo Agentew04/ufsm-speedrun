@@ -322,3 +322,18 @@ Regras: toda request passa por UfsmClient; raw em data/raw; ETL nunca faz reques
 | Pré-requisitos incompletos | alta | médio | `periodo_ideal` como sinal brando; documentar |
 | Universo de pares de ementas explodir | média | médio | bloquear comparação por cluster de nome/código |
 | Escopo "todos os cursos" inviável na prática | média | baixo | é análise teórica; declarar premissas na UI |
+
+---
+
+## 11. Fase 7 executada — dashboard client-side (2026-10-28)
+
+O §8 descrevia FastAPI + Jinja2. A dashboard foi implementada **sem servidor**:
+`web/` (React + Vite + sql.js + Cytoscape) abre `data/ufsm.db` no navegador e
+calcula tudo no cliente — o produto é "baixe o banco e abra o site".
+
+- modelo de dados, semântica das cotas (DCG / eletiva de núcleo / cota aberta),
+  custo de fechar um curso e plano semestral: `docs/frontend.md`
+- contrato com a coleta: `docs/frontend-contrato.md`
+- como rodar: `web/README.md` (`snapshot-db.py` aplica o WAL; `npm run dev`)
+
+O banco é read-only: nenhuma query volta para a UFSM e nada é gravado.
