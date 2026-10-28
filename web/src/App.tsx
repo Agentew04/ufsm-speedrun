@@ -10,13 +10,15 @@ import { CourseDetail } from './components/CourseDetail'
 import { NetworkGraph } from './components/Graph'
 import { Matrix } from './components/Matrix'
 import { Metodo } from './components/Metodo'
+import { SpeedrunView } from './components/Speedrun'
 import { num } from './lib/format'
 
-type Aba = 'ranking' | 'curso' | 'rede' | 'mapa' | 'metodo'
+type Aba = 'ranking' | 'curso' | 'todos' | 'rede' | 'mapa' | 'metodo'
 
 const ABAS: { id: Aba; label: string }[] = [
   { id: 'ranking', label: 'Ranking' },
   { id: 'curso', label: 'Curso' },
+  { id: 'todos', label: 'Todos' },
   { id: 'rede', label: 'Rede' },
   { id: 'mapa', label: 'Mapa' },
   { id: 'metodo', label: 'Método' },
@@ -268,6 +270,10 @@ export default function App() {
                 </button>
               </div>
             ))}
+
+          {aba === 'todos' && (
+            <SpeedrunView universo={universo} base={base} done={done} onOpenCurso={escolherAlvo} />
+          )}
 
           {aba === 'rede' &&
             (base ? (

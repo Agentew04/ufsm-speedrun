@@ -131,3 +131,33 @@ O front é **tolerante a dado parcial**: `LEFT JOIN` em tudo, estados vazios
 explícitos ("a coleta ainda não chegou neste curso"), e o topo mostra a
 porcentagem de ofertas com pré-requisito. Reexportar o banco melhora os números
 sem mexer no código.
+
+## 7. Run completo (aba `Todos`)
+
+Pergunta: "e para fazer **todos** os outros?". `lib/speedrun.ts` monta a rota.
+
+- **Pool** = tudo que o aluno já tem (`done.ids` + horas de eletiva).
+- **Custo marginal** de um curso = as mesmas regras do §3, mas com o pool no
+  lugar de `done`: obrigatórias que faltam, equivalências oficiais, cotas DCG/
+  abertas preenchidas pelo excedente do pool e cotas de menu fechado preenchidas
+  com as candidatas mais "compartilhadas" (mais cursos listam → mais útil).
+- **Rota gulosa**: a cada passo escolhe o curso de menor custo marginal
+  (horas, depois nº de cadeiras). O curso escolhido fecha; os que já estavam
+  cobertos entram como passos de 0 h.
+- As cadeiras novas do passo entram no pool — é isso que faz os cursos
+  seguintes ficarem mais baratos.
+
+Fatos que a tela deixa explícitos:
+
+- **O total não depende da ordem** (união de conjuntos). A ordem muda só *quando*
+  cada curso fecha; a rota gulosa minimiza cada passo.
+- Com Ciência da Computação como base: **5.219 cadeiras distintas**, **314.395 h**
+  extras, **~583 semestres (~292 anos)** — 4.375 cadeiras pertencem a um único
+  currículo e só 750 aparecem em 2+ cursos. Metade das horas está nos primeiros
+  98 cursos; a cauda é Medicina/Veterinária/Agronomia.
+- A curva (barras = custo do passo, linha = acumulado) mostra o "degrau" que
+  cada curso caro impõe.
+
+Limites: o run inteiro não simula pré-requisitos (seria uma árvore de 5 mil
+nós); o semestre de fechamento é `CH acumulada ÷ carga média`. Cada passo
+individual continua tendo o plano completo na aba **Curso**.
