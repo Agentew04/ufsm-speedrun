@@ -15,7 +15,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import (config, curriculos, db, discover, ementas, endpoints,
-               equivalencia, relacoes, validacao)
+               equivalencia, julgamento, relacoes, validacao)
 from .http import UfsmClient
 
 VERSAO_DEMO = "104760"  # Ciência da Computação, currículo 2024
@@ -273,6 +273,38 @@ def cmd_equivalencia(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_julgar_exportar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        destino = Path(args.dir) if args.dir else config.DATA_DIR / "exports" / "lotes"
+        caminhos = julgamento.exportar_lotes(conn, destino, lotes=args.lotes)
+        if not caminhos:
+            print("nada a julgar: rode 'equivalencia' antes")
+            return 0
+        for c in caminhos:
+            print(f"    {c.name}")
+    finally:
+        conn.close()
+    return 0
+
+
+def cmd_julgar_aplicar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        origem = Path(args.dir) if args.dir else config.DATA_DIR / "exports" / "lotes"
+        julgamento.aplicar(conn, origem, julgador=args.julgador)
+        julgamento.relatorio(conn)
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -391,6 +423,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limiar-nao", type=float, default=0.22, help="score máximo para 'nao_equivalente'")
     p.add_argument("--sem-export", action="store_true", help="não exportar a banda de revisão")
     p.set_defaults(func=cmd_equivalencia)
+
+    p = sub.add_parser("julgar-exportar", help="fase 6b: exporta a banda prioritária em lotes para julgamento")
+    p.add_argument("--lotes", type=int, default=10, help="em quantos lotes dividir")
+    p.add_argument("--dir", default=None, help="pasta de saída (padrão: data/exports/lotes)")
+    p.set_defaults(func=cmd_julgar_exportar)
+
+    p = sub.add_parser("julgar-aplicar", help="fase 6b: grava os vereditos julgados no banco")
+    p.add_argument("--dir", default=None, help="pasta dos vereditos (padrão: data/exports/lotes)")
+    p.add_argument("--julgador", default="llm", help="rótulo de quem julgou")
+    p.set_defaults(func=cmd_julgar_aplicar)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)

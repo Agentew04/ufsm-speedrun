@@ -105,12 +105,42 @@ decompõe assim:
 | **ementa idêntica mas nome diferente** | 215 | **0,89** | **sim** |
 | **score ≥ 0,60 sem sequência** | **462** | — | **sim** |
 
-Ou seja: **462 pares** merecem adjudicação, exportados em
-`data/exports/equivalencias-prioritarias.csv` com as duas ementas lado a lado.
-Isso cabe em 5–3 lotes de LLM, com saída estruturada
-(`equivalente | nao_equivalente | inconclusivo` + justificativa).
+### Como foi feito
 
-O CSV completo (`equivalencias-revisar.csv`, 58k) fica para auditoria.
+Os **462 pares** foram exportados em 10 lotes (`data/exports/lotes/`) e julgados
+por 10 subagentes em paralelo, cada um lendo um arquivo e gravando o veredito no
+mesmo formato. Nenhum par ficou sem julgamento (47/47 em 9 lotes, 39 no último).
+
+Persistência em tabela **separada** (`equivalencia_julgada`) — o palpite da
+heurística nunca é sobrescrito, então dá para comparar os dois e re-julgar.
+
+| veredito | pares | confiança média |
+|---|---|---|
+| equivalente | **233** | 0,75 |
+| parcial | 193 | 0,58 |
+| nao_equivalente | 36 | 0,53 |
+
+Dos 233 confirmados, a maioria fora do SIE é **presencial × EaD** da mesma
+disciplina — exatamente o tipo de par que o SIE não declara e que rende
+aproveitamento:
+
+```
+LTC1004 LATIM BÁSICO             ↔ EAD1095 LATIM BÁSICO - EAD
+LTV1012 SINTAXE DO PORTUGUÊS     ↔ EAD1081 SINTAXE DO PORTUGUÊS - EAD
+EDE1130 LIBRAS: LICENCIATURAS    ↔ EAD2016 LIBRAS: LICENCIATURAS/EAD
+ADM2020 CUSTOS                   ↔ CTB1110 FUNDAMENTOS DE CUSTOS
+CAD1015 SISTEMAS DE INFORMAÇÃO   ↔ ADM2019 SISTEMAS DE INFORMAÇÕES
+```
+
+O CSV completo (`equivalencias-prioritarias.csv`) fica para auditoria.
+
+## 4b. Quanto custou
+
+- 68.607 pares pontuados: ~10 s (CPU, numpy/sklearn)
+- 462 pares julgados: 10 subagentes em paralelo, ~2 min
+- Cada lote: ~80 KB de JSON, ~20 mil tokens
+
+Ou seja: o funil é o que torna a LLM viável. Sem ele, seriam 68 mil pares.
 
 ## 5. A regra de negócio, corrigida
 

@@ -238,7 +238,25 @@ Método final:
 O nome não decide nada — serve para bloquear e para detectar sequência. A LLM
 entra só na faixa de score alto sem conflito de sequência.
 
-### Fase 6b — otimizador de rota
+### ✅ Fase 6b — adjudicação da banda prioritária (concluída)
+
+Comandos: `julgar-exportar --lotes 10` e `julgar-aplicar`.
+
+Os 462 pares prioritários foram exportados em 10 lotes e julgados por **10
+subagentes em paralelo** (cada um lê um arquivo e grava o veredito no mesmo
+formato). Nenhum par ficou de fora.
+
+| veredito | pares | confiança média |
+|---|---|---|
+| equivalente | **233** | 0,75 |
+| parcial | 193 | 0,58 |
+| nao_equivalente | 36 | 0,53 |
+
+Persistido em **`equivalencia_julgada`** (tabela separada — o palpite da heurística
+nunca é sobrescrito, então dá para comparar e re-julgar). A maioria dos
+confirmados fora do SIE é **presencial × EaD** da mesma disciplina.
+
+### Fase 6c — otimizador de rota
 
 Modelo:
 - `Nó` = `disciplina` global (cursar uma vez serve para vários cursos)

@@ -218,7 +218,10 @@ def checar_densidade_relacoes(conn: sqlite3.Connection) -> Achado:
     )
 
     if eqv_orfas or pre_orfas:
-        severidade = "problema"
+        # o SIE tem algumas referências órfãs na origem (disciplina: null);
+        # só é "problema" nosso se a proporção for grande
+        proporcao = (eqv_orfas + pre_orfas) / max(1, eqv + pre)
+        severidade = "problema" if proporcao > 0.01 else "atencao"
     elif pendentes:
         severidade = "atencao"
     else:
@@ -234,6 +237,37 @@ def checar_densidade_relacoes(conn: sqlite3.Connection) -> Achado:
     return Achado("Pré-requisitos e equivalências (Fase 3)", severidade, detalhe)
 
 
+def checar_julgamento(conn: sqlite3.Connection) -> Achado:
+    existe = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='equivalencia_julgada'"
+    ).fetchone()[0]
+    if not existe:
+        return Achado("Adjudicação da banda prioritária (Fase 6b)", "atencao",
+                      "tabela ainda não existe — rode: julgar-exportar e julgar-aplicar")
+
+    total = _escalar(conn, "SELECT COUNT(*) FROM equivalencia_julgada")
+    orfaos = _escalar(
+        conn,
+        """
+        SELECT COUNT(*) FROM equivalencia_julgada ej
+        WHERE NOT EXISTS (SELECT 1 FROM similaridade_ementa se
+                          WHERE se.disciplina_a = ej.disciplina_a
+                            AND se.disciplina_b = ej.disciplina_b)
+        """,
+    )
+    resumo = ", ".join(
+        f"{v}: {n}" for v, n in conn.execute(
+            "SELECT veredito, COUNT(*) FROM equivalencia_julgada "
+            "GROUP BY veredito ORDER BY COUNT(*) DESC"
+        )
+    )
+    return Achado(
+        "Adjudicação da banda prioritária (Fase 6b)",
+        "atencao" if orfaos else "ok",
+        f"{total} pares julgados ({resumo})" + (f" · {orfaos} fora do palpite atual" if orfaos else ""),
+    )
+
+
 # --------------------------------------------------------------------- relatório
 def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
     destino = destino or (config.PROJECT_ROOT / "docs" / "relatorio-qualidade.md")
@@ -244,6 +278,7 @@ def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
         checar_carga_horaria(conn),
         checar_densidade_relacoes(conn),
         checar_buckets(conn),
+        checar_julgamento(conn),
     ]
 
     icone = {"ok": "✅", "atencao": "⚠️", "problema": "❌"}

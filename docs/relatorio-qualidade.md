@@ -1,6 +1,6 @@
 # Relatório de qualidade dos dados
 
-Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
+Gerado em 2026-10-28T23:54:03Z por `python -m ufsm_speedrun validar`.
 
 | | verificação | situação |
 |---|---|---|
@@ -8,11 +8,12 @@ Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
 | ✅ | Cursos sem nenhuma versão de currículo | 0 curso(s) |
 | ✅ | Cursos sem versão selecionada | 0 curso(s) |
 | ✅ | Versões selecionadas sem árvore curricular (Fase 2 falhou?) | 0 versão(ões) |
-| ✅ | Ementas (Fase 4) | 8297/8297 baixadas · 7870 com programa · 0 pendentes · 427 sem programa no SIE |
+| ⚠️ | Ementas (Fase 4) | 9081/11159 baixadas · 8641 com programa · 2078 pendentes · 440 sem programa no SIE |
 | ⚠️ | Integridade do grafo de pré-requisitos | 3806 arestas · 4 auto-exigência(s) · 0 ciclo(s) real(is) |
 | ⚠️ | Coerência de carga horária | 148 versões conferidas · 1 com obrigatórias acima do total |
-| ✅ | Pré-requisitos e equivalências (Fase 3) | 6031/12313 ofertas com flag · 6031 com relação gravada · 0 pendentes · 4649 arestas de prereq · 5008 itens de equivalência |
+| ⚠️ | Pré-requisitos e equivalências (Fase 3) | 6031/12313 ofertas com flag · 6031 com relação gravada · 0 pendentes · 4649 arestas de prereq · 5008 itens de equivalência · ❗ 0 prereq e 5 equivalências sem disciplina referenciada |
 | ⚠️ | Cotas abertas (sem disciplinas e sem atividades) | 21 cota(s) — precisam de tratamento explícito no otimizador |
+| ✅ | Adjudicação da banda prioritária (Fase 6b) | 462 pares julgados (equivalente: 233, parcial: 193, nao_equivalente: 36) |
 
 ## ✅ Integridade referencial
 
@@ -30,9 +31,9 @@ Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
 
 0 versão(ões)
 
-## ✅ Ementas (Fase 4)
+## ⚠️ Ementas (Fase 4)
 
-8297/8297 baixadas · 7870 com programa · 0 pendentes · 427 sem programa no SIE
+9081/11159 baixadas · 8641 com programa · 2078 pendentes · 440 sem programa no SIE
 
 ## ⚠️ Integridade do grafo de pré-requisitos
 
@@ -49,9 +50,9 @@ Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
 
 - `Ciências Biológicas - Núcleo Comum (2024): obrigatórias 1110h > total 1080h`
 
-## ✅ Pré-requisitos e equivalências (Fase 3)
+## ⚠️ Pré-requisitos e equivalências (Fase 3)
 
-6031/12313 ofertas com flag · 6031 com relação gravada · 0 pendentes · 4649 arestas de prereq · 5008 itens de equivalência
+6031/12313 ofertas com flag · 6031 com relação gravada · 0 pendentes · 4649 arestas de prereq · 5008 itens de equivalência · ❗ 0 prereq e 5 equivalências sem disciplina referenciada
 
 ## ⚠️ Cotas abertas (sem disciplinas e sem atividades)
 
@@ -73,6 +74,10 @@ Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
 - `75h · Engenharia Ambiental e Sanitária - CAMPUS UFSM-FW (2027) · ATIVIDADES COMPLEMENTARES DE GRADUAÇÃO`
 - `60h · Administração - Noturno (2026) · ATIVIDADES COMPLEMENTARES DE GRADUAÇÃO`
 
+## ✅ Adjudicação da banda prioritária (Fase 6b)
+
+462 pares julgados (equivalente: 233, parcial: 193, nao_equivalente: 36)
+
 ---
 
 ## Contagens
@@ -81,7 +86,7 @@ Gerado em 2026-10-28T23:18:26Z por `python -m ufsm_speedrun validar`.
 curso                        148
 versao_curriculo             528
 estrutura                   1574
-disciplina                  8297
+disciplina                 11159
 disciplina_curriculo       12313
 prereq_item                 6036
 equivalencia_item           5008
