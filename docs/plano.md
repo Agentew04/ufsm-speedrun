@@ -3,8 +3,8 @@
 > Documento de retomada. Se o chat for perdido, comece lendo este arquivo e
 > `docs/ufsm-api.md`. Tudo que foi decidido e descoberto está aqui.
 
-Última atualização: 2026-10-28 · status: **Fases 0, 1 e 2 concluídas** ·
-Fases 3 e 4 implementadas (crawl longo pendente) · Fases 5–7 a fazer
+Última atualização: 2026-10-28 · status: **coleta completa (Fases 0–5)** ·
+próximas: Fase 6 (equivalência heurística + otimizador) e Fase 7 (dashboard)
 
 ---
 
@@ -153,42 +153,56 @@ Checkpoint dos buckets abertos: 245 cotas fechadas por atividades complementares
 **21 cotas realmente abertas** (sem disciplinas e sem atividades) — ex.: DCG de 420 h
 em Sistemas de Informação/2026 e Engenharia de Transportes e Logística/2023.
 
-### Fase 3 — pré-requisitos e equivalências
+### ✅ Fase 3 — pré-requisitos e equivalências (concluída)
 
-- para cada `disciplina_curriculo` com `tem_prereq`/`tem_equiv`:
-  `POST curso/preRequisitosAgrupados.json` e/ou `.../equivalenciasAgrupadas.json`
-- popular `prereq_bloco`/`prereq_item` e `equivalencia_bloco`/`equivalencia_item`
-- comando: `python -m ufsm_speedrun relacoes`
-- **retomável**: reprocessar é barato (cache), e falha não grava nada
+Comando: `python -m ufsm_speedrun relacoes`
 
-Volume real: **6.031 ofertas** com alguma relação → ~7,2 mil requests rápidos
-(≈0,1 s) ≈ **3,5 h** a 1,75 s.
+Resultado: **6.031/6.031** ofertas processadas, 0 pendentes
+- 3.105 blocos e **6.036 itens** de pré-requisito
+- 4.795 blocos e **5.008 itens** de equivalência
+- **4.649 arestas** no grafo de pré-requisitos
 
-### Fase 4 — ementas
+### ✅ Fase 4 — ementas (concluída)
 
-- catálogo único de códigos: **8.259** (não 3–4 mil como estimado)
-- `POST disciplina/disciplina.json` por código
-- normalizar HTML → texto; separar `programa_texto` (tipo 2, recursivo) de
-  `bibliografia_texto` (tipo 1); guardar `objetivos_html` bruto
-- comando: `python -m ufsm_speedrun ementas` (pula quem já tem `raw_file`)
-- **checkpoint**: nº de disciplinas sem programa (varia muito: amostra deu 2/3 sem)
+Comando: `python -m ufsm_speedrun ementas`
 
-Volume real: 8.259 requests (~0,1 s, ~6 KB) ≈ **4 h** a 1,75 s. É o gargalo.
+Resultado: **8.297/8.297** disciplinas processadas
+- 7.870 com programa (ementa) · 427 sem programa cadastrado no SIE
+- 2 códigos (`QMC1885`, `QMC1886`) respondem **HTTP 200 com corpo vazio** —
+  tratados como "inexistente", não como erro
+- 5,8 MB de texto de ementa normalizado
+- ~57 MB baixados, 10.151 s (2h49)
 
-### Estado do banco (2026-10-28)
+### ✅ Fase 5 — validação (concluída)
+
+`python -m ufsm_speedrun validar` → `docs/relatorio-qualidade.md`
+Resultado: **6 ok · 3 atenção · 0 problemas**.
+
+As 3 atenções são todas de origem no SIE, não do nosso modelo:
+1. **4 auto-pré-requisitos** (`MSC1272`, `MSC1259`, `UFSM00061`, `UFSM00923` exigem
+   a si mesmos) — basta ignorar a aresta
+2. **1 versão com CH inconsistente** (Ciências Biológicas – Núcleo Comum/2024:
+   1.110 h de obrigatórias num curso de 1.080 h)
+3. **21 cotas abertas** — precisam de tratamento no otimizador
+
+### Estado do banco (coleta concluída em 2026-10-28)
 
 | tabela | linhas |
 |---|---|
 | `curso` | 148 |
 | `versao_curriculo` | 528 (148 com `selecionada=1`) |
 | `estrutura` | 1.574 |
-| `estrutura_atividade` | 2.367 |
-| `disciplina` | 8.259 (só 3 com ementa — Fase 4 pendente) |
+| `estrutura_atividade` | 4.812 |
+| `disciplina` | 8.297 (7.870 com ementa · 427 sem programa no SIE) |
+| `disciplina_ch` | 12.899 |
 | `disciplina_curriculo` | 12.313 |
-| `prereq_*` / `equivalencia_*` | parciais (amostra de 6 ofertas) |
+| `prereq_bloco` / `prereq_item` | 3.105 / 6.036 |
+| `equivalencia_bloco` / `equivalencia_item` | 4.795 / 5.008 |
 
-Pendente para fechar a coleta: `relacoes` (~3,5 h) + `ementas` (~4 h) a 1,75 s.
-Com `--delay 0.8` cai para ~1,6 h + ~1,9 h. Ambos são retomáveis.
+Disco: 16.337 respostas cruas (160 MB) · banco 31 MB · 5,8 MB de texto de ementa.
+
+Custo do crawl completo: ~15,5 mil requests, ~4 h a 0,8 s/request, **zero erro**
+e **zero penalidade** (um único 503 transitório no início).
 
 ### Fase 5 — ETL e validação
 

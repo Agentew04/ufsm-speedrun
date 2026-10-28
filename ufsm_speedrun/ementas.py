@@ -29,6 +29,7 @@ class Coleta:
     processadas: int = 0
     com_programa: int = 0
     sem_programa: int = 0
+    sem_resposta: int = 0
     erros: list[str] = field(default_factory=list)
 
 
@@ -81,7 +82,9 @@ def run(client: UfsmClient, conn: sqlite3.Connection, *, limit: int | None = Non
     for i, (disc_id, codigo, nome) in enumerate(alvos, 1):
         try:
             resp = client.call(endpoints.DISCIPLINA_DETALHE, {"codigo": codigo})
-            d = resp.data
+            d = resp.data or {}
+            if not d:
+                coleta.sem_resposta += 1
 
             programa = extrair_conteudo(d.get("programaDisciplina"), TIPO_PROGRAMA)
             bibliografia = extrair_conteudo(d.get("programaDisciplina"), TIPO_BIBLIOGRAFIA)
@@ -139,7 +142,7 @@ def run(client: UfsmClient, conn: sqlite3.Connection, *, limit: int | None = Non
             coleta.processadas += 1
             if programa:
                 coleta.com_programa += 1
-            else:
+            elif d:
                 coleta.sem_programa += 1
 
             if client.verbose and (i % 50 == 0 or i == total):
@@ -163,6 +166,7 @@ def relatorio(conn: sqlite3.Connection, coleta: Coleta) -> None:
     print(f"  disciplinas processadas .... {coleta.processadas}")
     print(f"  com programa (ementa) ...... {coleta.com_programa}")
     print(f"  sem programa cadastrado .... {coleta.sem_programa}")
+    print(f"  resposta vazia (código inexistente) {coleta.sem_resposta}")
     print(f"  total no banco com ementa .. "
           f"{escalar('SELECT COUNT(*) FROM disciplina WHERE programa_texto IS NOT NULL AND programa_texto <> \"\"')}")
     print(f"  total de disciplinas ....... {escalar('SELECT COUNT(*) FROM disciplina')}")

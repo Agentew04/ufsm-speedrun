@@ -481,6 +481,8 @@ extraia com regex `(\d{4})` e trate o resto como desconhecido.
 | 14 | Duas chamadas ao mesmo endpoint com params diferentes têm `id` de oferta diferente | dedupe errado | chave = `(versao, estrutura, disciplina)` |
 | 15 | `numero` da versão nem sempre é ano (`2021/2`, `INATIV`, `.`) | ordenação errada | extrair `(\d{4})` com regex |
 | 16 | Busca em massa (`busca.json`) não traz `programaDisciplina` | parece atalho, não é | ementa exige 1 request por código |
+| 17 | Alguns códigos respondem **200 com corpo vazio** (`QMC1885`) | quebra `json.loads` | tratar corpo vazio como "sem dados", não como erro |
+| 18 | O SIE registra disciplinas como pré-requisito de si mesmas (4 casos) | ciclo no grafo | ignorar arestas `origem == destino` |
 
 ---
 

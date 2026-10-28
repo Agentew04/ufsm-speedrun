@@ -6,15 +6,17 @@ entre cursos, aproveitando cadeiras e equivalências.
 
 ## Estado
 
-- ✅ **Fase 0** — cliente HTTP polido, log/cache em disco, esquema do banco
-- ✅ **Fase 1** — 148 cursos e 528 versões de currículo descobertos
-- ✅ **Fase 2** — 148 currículos: 1.574 núcleos, 12.313 ofertas, 8.259 disciplinas
-- 🚧 **Fase 3** — pré-requisitos e equivalências (implementada, crawl pendente)
-- 🚧 **Fase 4** — ementas (implementada, crawl pendente)
-- ✅ **Fase 7** — dashboard client-side em `web/` (ranking, plano, grafo, mapa)
+**Coleta completa** — 148 cursos, 528 versões, 12.313 ofertas, 8.297 disciplinas
+(7.870 com ementa), 6.036 pré-requisitos, 5.008 equivalências. Validação:
+6 ok · 3 atenção · 0 problemas.
 
-Plano completo em [docs/plano.md](docs/plano.md) e documentação da API do SIE em
-[docs/ufsm-api.md](docs/ufsm-api.md).
+- ✅ **Fases 0–5** — coleta, ETL e validação (`ufsm_speedrun/`)
+- ✅ **Fase 7** — dashboard client-side em `web/` (ranking, plano, grafo, mapa)
+- ⏳ **Fase 6** — equivalência heurística + otimizador de rota
+
+Plano completo em [docs/plano.md](docs/plano.md), documentação da API do SIE em
+[docs/ufsm-api.md](docs/ufsm-api.md) e o contrato de dados em
+[docs/frontend-contrato.md](docs/frontend-contrato.md).
 
 ## Setup
 

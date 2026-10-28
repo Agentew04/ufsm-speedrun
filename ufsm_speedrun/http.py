@@ -168,7 +168,10 @@ class UfsmClient:
                     "penalties": self.stats.penalties,
                 })
                 cached_body = envelope["response"]["body"]
-                data = json.loads(cached_body) if parse_json else cached_body
+                if parse_json:
+                    data = json.loads(cached_body) if cached_body.strip() else None
+                else:
+                    data = cached_body
                 return Result(data, envelope["meta"], True, self.stats)
 
         # ------------------------------------------------- cabeçalhos e corpo
@@ -227,7 +230,9 @@ class UfsmClient:
                           f"-> {status} {len(raw)/1024:.0f} KB {elapsed_ms} ms")
 
                 if parse_json:
-                    parsed = json.loads(body)
+                    # Alguns códigos do SIE respondem 200 com corpo vazio
+                    # (disciplina inexistente). Isso não é erro de parse.
+                    parsed = json.loads(body) if body.strip() else None
                     if isinstance(parsed, dict) and parsed.get("error") is True:
                         raise UfsmApiError(parsed.get("mensagem") or "erro não especificado")
                 else:

@@ -97,32 +97,33 @@ def checar_ementas(conn: sqlite3.Connection) -> Achado:
 
 
 def checar_grafo(conn: sqlite3.Connection) -> Achado:
-    """Procura ciclos no grafo global de pré-requisitos."""
+    """Procura auto-exigências e ciclos reais no grafo de pré-requisitos."""
     arestas = conn.execute(
-        "SELECT DISTINCT pi.disciplina_req_id, dc.disciplina_id "
+        "SELECT DISTINCT pi.disciplina_req_id, dc.disciplina_id, d.codigo "
         "FROM prereq_item pi "
         "JOIN prereq_bloco pb ON pb.id = pi.bloco_id "
         "JOIN disciplina_curriculo dc ON dc.id = pb.disciplina_curriculo_id "
+        "JOIN disciplina d ON d.id = dc.disciplina_id "
         "WHERE pi.tipo_item IN (1, 2) AND pi.disciplina_req_id IS NOT NULL"
     ).fetchall()
 
+    codigos = dict(conn.execute("SELECT id, codigo FROM disciplina"))
+    auto = [(origem, cod) for origem, destino, cod in arestas if origem == destino]
     grafo: dict[int, set[int]] = {}
-    for origem, destino in arestas:
-        grafo.setdefault(origem, set()).add(destino)
+    for origem, destino, _ in arestas:
+        if origem != destino:
+            grafo.setdefault(origem, set()).add(destino)
 
     BRANCO, CINZA, PRETO = 0, 1, 2
     cor: dict[int, int] = {}
     ciclos: list[str] = []
-
-    codigos = dict(conn.execute("SELECT id, codigo FROM disciplina"))
 
     def dfs(no: int, caminho: list[int]) -> None:
         cor[no] = CINZA
         for vizinho in grafo.get(no, ()):
             if cor.get(vizinho, BRANCO) == CINZA:
                 i = caminho.index(vizinho) if vizinho in caminho else 0
-                ciclo = caminho[i:] + [vizinho]
-                ciclos.append(" -> ".join(codigos.get(n, str(n)) for n in ciclo))
+                ciclos.append(" -> ".join(codigos.get(n, str(n)) for n in caminho[i:] + [vizinho]))
             elif cor.get(vizinho, BRANCO) == BRANCO:
                 dfs(vizinho, caminho + [vizinho])
         cor[no] = PRETO
@@ -131,12 +132,13 @@ def checar_grafo(conn: sqlite3.Connection) -> Achado:
         if cor.get(no, BRANCO) == BRANCO:
             dfs(no, [no])
 
-    return Achado(
-        "Ciclos no grafo de pré-requisitos",
-        "ok" if not ciclos else "problema",
-        f"{len(arestas)} arestas · {len(ciclos)} ciclo(s) detectado(s)",
-        ciclos[:10],
-    )
+    # Auto-exigência é erro de cadastro do SIE, não do nosso modelo: é corrigível
+    # ignorando a aresta, então é "atenção", não "problema".
+    severidade = "problema" if ciclos else ("atencao" if auto else "ok")
+    detalhe = (f"{len(arestas)} arestas · {len(auto)} auto-exigência(s) · "
+               f"{len(ciclos)} ciclo(s) real(is)")
+    amostra = [f"auto: {cod}" for _, cod in auto[:6]] + [f"ciclo: {c}" for c in ciclos[:6]]
+    return Achado("Integridade do grafo de pré-requisitos", severidade, detalhe, amostra)
 
 
 def checar_carga_horaria(conn: sqlite3.Connection) -> Achado:
