@@ -81,6 +81,22 @@ dentro do bloco; pré-requisito fora do currículo-alvo é ignorado). Depois as
 disciplinas são empacotadas em semestres respeitando `cargaSemestre`. Ciclos de
 pré-requisito caem num bloco final em vez de travar.
 
+**DCG estratégica (o "pulo do gato"):** as horas de DCG/cota aberta do curso de
+origem aceitam **qualquer disciplina do catálogo**. Então elas podem ter sido
+gastas justamente nas obrigatórias que faltam no curso-alvo — é o mecanismo que
+faz "terminei CC e no semestre seguinte fechei SI". A regra:
+
+```
+livre = horas de DCG/cota aberta do curso-base (freeAberto)
+para cada obrigatória do alvo que falta, da maior CH para a menor:
+    se cabe em livre: conta como cumprida (badge DCG)  e livre -= CH
+o resto de livre + as disciplinas do aluno fora do alvo formam o pool das cotas
+```
+
+Menu fechado (`eletiva` de núcleo) **não** entra nessa conta: só vale a lista do
+núcleo. O interruptor "DCG estratégica" na barra lateral liga/desliga (default
+ligado; é uma escolha que o aluno faz, não um fato).
+
 O bin-packing usa a CH máxima oficial como teto — por isso um curso de 58
 cadeiras pode fechar em ~6 semestres. É uma estimativa otimista e explícita:
 não modela oferta de turma, choque de horário, estágio obrigatório presencial
@@ -121,16 +137,43 @@ visível.
 | limite | impacto | próximo passo |
 |---|---|---|
 | pré-requisitos ~25% das ofertas | plano semestral otimista | nada no front; depende da Fase 3 |
-| equivalência oficial incompleta | reaproveitamento subestimado | depende da Fase 3 |
+| **equivalências gravadas sem disciplina** | **métrica subestimada hoje** — ver §8 | corrigir parser e reprocessar o raw |
 | ementas quase vazias | nenhum (ainda não usadas) | Fase 6a + badge na UI |
-| reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | mostrar candidatos por nome/ementa |
+| reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | equivalência oficial resolve (quando consertada) |
 | oferta de turma/horário não modelada | semestres otimistas | integrar horários (não existe no SIE público) |
 | cota restrita usa só o menu do núcleo | pode subestimar equivalência aprovada caso a caso | revisão humana da Fase 6a |
+| DCG estratégica é uma escolha do aluno | cenário otimista (mas realista se planejado) | interruptor na UI; default ligado |
 
 O front é **tolerante a dado parcial**: `LEFT JOIN` em tudo, estados vazios
 explícitos ("a coleta ainda não chegou neste curso"), e o topo mostra a
 porcentagem de ofertas com pré-requisito. Reexportar o banco melhora os números
 sem mexer no código.
+
+## 8. Bug encontrado na coleta (para a frente A)
+
+`equivalencia_item` tem 4.862 linhas **todas com `disciplina_req_id` e
+`disciplina_req_codigo` nulos**: o parser lê `item["disciplinaRequisito"]`
+(campo de pré-requisito), mas a API de equivalências devolve a disciplina em
+`item["disciplina"]`. O `data/raw/` já tem o dado (5.007 pares!), então é
+reprocessar — **não precisa de novo crawl**.
+
+Impacto medido nos brutos de hoje (partindo de CC):
+
+| curso | obrigatórias | cobertas por equivalência com CC |
+|---|---|---|
+| Sistemas de Informação | 37 | **14** |
+| Engenharia de Computação | 59 | 9 |
+| Engenharia de Produção | — | 6 |
+
+Com isso CC→SI sai de ~1.470 h / 3 semestres (DCG estratégica) para ~900 h /
+2 semestres. O `prereq_*` está correto (99% das ofertas com pré-requisito já têm
+blocos), então a correção é pontual.
+
+Patch sugerido em `ufsm_speedrun/relacoes.py` (linha ~52):
+
+```python
+req = item.get("disciplinaRequisito") or item.get("disciplina") or {}
+```
 
 ## 7. Run completo (aba `Todos`)
 
@@ -141,6 +184,8 @@ Pergunta: "e para fazer **todos** os outros?". `lib/speedrun.ts` monta a rota.
   lugar de `done`: obrigatórias que faltam, equivalências oficiais, cotas DCG/
   abertas preenchidas pelo excedente do pool e cotas de menu fechado preenchidas
   com as candidatas mais "compartilhadas" (mais cursos listam → mais útil).
+- A **DCG estratégica** do curso-base é materializada nas obrigatórias do
+  primeiro curso que ela ajuda (480 h ≈ 8 cadeiras no caso CC→SI).
 - **Rota gulosa**: a cada passo escolhe o curso de menor custo marginal
   (horas, depois nº de cadeiras). O curso escolhido fecha; os que já estavam
   cobertos entram como passos de 0 h.

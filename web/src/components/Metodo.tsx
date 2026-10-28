@@ -37,6 +37,12 @@ export function Metodo({ universo }: { universo: Universe }) {
             menu fechado: só valem as disciplinas listadas ali — o app não infla o reaproveitamento
             usando uma cadeira de outro curso que não está na lista.
           </p>
+          <p className="tiny dim">
+            <b>DCG estratégica:</b> as horas de DCG/cota aberta do seu curso são a parte livre do
+            currículo — podem ter sido gastas em qualquer disciplina do catálogo, inclusive nas
+            obrigatórias de outro curso. O app assume isso por padrão (interruptor na barra
+            lateral); desligue para ver o cenário conservador, em que a DCG só preenche DCG.
+          </p>
 
           <h3>3. Custo de fechar um curso</h3>
           <p>

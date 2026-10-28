@@ -111,7 +111,8 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
           <span className="kpi-label">reaproveitamento</span>
           <b>{pct(score.overlapPct)}</b>
           <span className="kpi-foot">
-            {score.fixedCovered.length + score.fixedEquiv.length} de {target.fixed.length} obrigatórias
+            {score.fixedCovered.length + score.fixedEquiv.length + score.fixedDcg.length} de{' '}
+            {target.fixed.length} obrigatórias
           </span>
         </div>
       </div>
@@ -232,7 +233,7 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                 <span className="eyebrow">de graça</span>
                 <h3>O que você já mata</h3>
               </div>
-              {score.fixedCovered.length === 0 && score.fixedEquiv.length === 0 ? (
+              {score.fixedCovered.length === 0 && score.fixedEquiv.length === 0 && score.fixedDcg.length === 0 ? (
                 <p className="hint">Nenhuma obrigatória em comum com o que você já cumpriu.</p>
               ) : (
                 <ul className="covered">
@@ -250,7 +251,22 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                       <span className="badge b-equiv">equiv</span>
                     </li>
                   ))}
+                  {score.fixedDcg.map((o) => (
+                    <li key={o.id}>
+                      <span className="cl-code">{o.codigo}</span>
+                      <span className="disc-name">{o.nome}</span>
+                      <span className="badge b-dcg">DCG</span>
+                    </li>
+                  ))}
                 </ul>
+              )}
+              {score.fixedDcg.length > 0 && (
+                <p className="note tiny">
+                  <b>{horas(score.fixedDcg.reduce((s, o) => s + o.ch, 0))}</b> dessas cadeiras cabem
+                  nas suas horas de DCG/cota aberta — você pode tê-las cursado como DCG no curso de
+                  origem. É a jogada que faz "terminar SI logo depois de CC". Ajuste em{' '}
+                  <em>DCG estratégica</em> na barra lateral.
+                </p>
               )}
               {score.freeFilledByDone > 0 && (
                 <p className="note tiny">

@@ -40,6 +40,9 @@ soltar também funciona). Dá para apontar outro banco com `?db=./caminho.db`.
 
 O checklist da barra lateral deixa ajustar o que já foi cumprido: semestre
 atual, disciplinas individuais e cadeiras feitas em outro curso/instituição.
+O interruptor **DCG estratégica** decide se as horas de DCG/cota aberta do seu
+curso podem ter sido gastas nas obrigatórias do curso-alvo (é o que encurta o
+próximo curso de verdade).
 
 ## Como a conta é feita
 

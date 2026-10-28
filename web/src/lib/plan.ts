@@ -5,6 +5,8 @@ export interface Done {
   ids: Set<number>
   /** horas de eletivas/DCG já cumpridas sem disciplina identificada (cota fechada) */
   freeHoras: number
+  /** parcela de freeHoras que é DCG/cota aberta: aceita qualquer disciplina */
+  freeAberto: number
   /** CH por disciplina (para o pool de eletivas reaproveitáveis) */
   chOf: Map<number, number>
 }
@@ -44,6 +46,8 @@ export interface CourseScore {
   fixedCovered: Oferta[]
   /** obrigatórias cobertas por equivalência oficial (não foram cursadas) */
   fixedEquiv: Oferta[]
+  /** obrigatórias cobertas pelas horas de DCG/cota aberta do curso de origem */
+  fixedDcg: Oferta[]
   semestres: number
   schedule: Semester[]
   atividadesHoras: number
@@ -64,6 +68,7 @@ export function makeDone(
   const ids = new Set<number>()
   const ch = new Map<number, number>()
   let freeHoras = 0
+  let freeAberto = 0
 
   const curricular = base
     ? base.fixed.filter((o) => o.periodo >= 99 || concluidoAte === null || o.periodo <= concluidoAte)
@@ -95,11 +100,15 @@ export function makeDone(
       : Math.min(1, Math.max(0, concluidoAte / base.semestres))
     for (const q of base.quotas) {
       if (q.kind === 'atividade') continue
-      freeHoras += Math.round(q.horas * fracao)
+      const h = Math.round(q.horas * fracao)
+      freeHoras += h
+      // só DCG e cota aberta aceitam qualquer disciplina; menu fechado não pode
+      // ser direcionado para a obrigatória de outro curso
+      if (q.kind === 'dcg' || q.kind === 'livre') freeAberto += h
     }
   }
 
-  return { ids, freeHoras, chOf: ch }
+  return { ids, freeHoras, freeAberto, chOf: ch }
 }
 
 /** Pré-requisito efetivo (só disciplinas; período/CH ficam como sinal fraco). */
@@ -118,12 +127,14 @@ function prereqDiscs(target: CourseModel, discId: number): number[] {
 export function scoreCourse(
   target: CourseModel,
   done: Done,
-  opcoes?: { agenda?: boolean; leve?: boolean },
+  opcoes?: { agenda?: boolean; leve?: boolean; estrategica?: boolean },
 ): CourseScore {
   const agenda = opcoes?.agenda ?? true
   const leve = opcoes?.leve ?? false
+  const estrategica = opcoes?.estrategica ?? true
   const fixedCovered: Oferta[] = []
   const fixedEquiv: Oferta[] = []
+  const fixedDcg: Oferta[] = []
   const fixedMissing: Oferta[] = []
 
   // equivalência oficial: o aluno tem uma disciplina que a matriz aceita no
@@ -140,7 +151,29 @@ export function scoreCourse(
     else fixedMissing.push(o)
   }
 
-  let surplus = done.freeHoras
+  // DCG estratégica: as horas de DCG/cota aberta do curso de origem aceitam
+  // qualquer disciplina do catálogo — então podem ter sido gastas justamente
+  // nas obrigatórias que faltam aqui ("fiz SI de graça como DCG do CC").
+  // Só vale para horas em aberto (dcg/livre), nunca para menu fechado.
+  let livre = estrategica ? Math.min(done.freeAberto, done.freeHoras) : 0
+  let livreUsado = 0
+  if (livre > 0 && fixedMissing.length) {
+    const ordenado = [...fixedMissing].sort((a, b) => b.ch - a.ch)
+    const resto: Oferta[] = []
+    for (const o of ordenado) {
+      if (o.ch <= livre) {
+        livre -= o.ch
+        livreUsado += o.ch
+        fixedDcg.push(o)
+      } else {
+        resto.push(o)
+      }
+    }
+    fixedMissing.length = 0
+    fixedMissing.push(...resto)
+  }
+
+  let surplus = done.freeHoras - livreUsado
   for (const [id, horas] of done.chOf) {
     if (target.fixedIds.has(id)) continue
     surplus += horas
@@ -245,7 +278,7 @@ export function scoreCourse(
 
   const schedule = agenda && !leve ? planSemesters(target, itens, done) : []
 
-  const overlapCh = [...fixedCovered, ...fixedEquiv].reduce((s, o) => s + o.ch, 0)
+  const overlapCh = [...fixedCovered, ...fixedEquiv, ...fixedDcg].reduce((s, o) => s + o.ch, 0)
 
   return {
     target,
@@ -256,6 +289,7 @@ export function scoreCourse(
     fixedMissing,
     fixedCovered,
     fixedEquiv,
+    fixedDcg,
     semestres: agenda && !leve ? schedule.length : Math.ceil(extraHoras / Math.max(1, target.cargaSemestre)),
     schedule,
     atividadesHoras,
@@ -338,9 +372,13 @@ export function planSemesters(target: CourseModel, itens: SemesterItem[], done: 
   return semesters
 }
 
-export function rankCourses(universo: Universe, done: Done, agenda = true): CourseScore[] {
+export function rankCourses(
+  universo: Universe,
+  done: Done,
+  opcoes?: { agenda?: boolean; estrategica?: boolean },
+): CourseScore[] {
   return universo.cursos
-    .map((c) => scoreCourse(c, done, { agenda }))
+    .map((c) => scoreCourse(c, done, { agenda: opcoes?.agenda ?? true, estrategica: opcoes?.estrategica }))
     .sort((a, b) => a.semestres - b.semestres || a.extraHoras - b.extraHoras || a.extraDisciplinas - b.extraDisciplinas)
 }
 

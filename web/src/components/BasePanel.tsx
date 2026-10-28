@@ -18,6 +18,8 @@ interface Props {
   addExtra: (id: number) => void
   removeExtra: (id: number) => void
   done: Done
+  estrategica: boolean
+  setEstrategica: (v: boolean) => void
 }
 
 export function BasePanel({
@@ -34,6 +36,8 @@ export function BasePanel({
   addExtra,
   removeExtra,
   done,
+  estrategica,
+  setEstrategica,
 }: Props) {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
@@ -174,6 +178,25 @@ export function BasePanel({
                 </div>
               ))}
             </div>
+          )}
+
+          {done.freeAberto > 0 && (
+            <>
+              <div className="divider" />
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={estrategica}
+                  onChange={(e) => setEstrategica(e.target.checked)}
+                />
+                DCG estratégica
+              </label>
+              <p className="hint tiny">
+                Você tem <b>{horas(done.freeAberto)}</b> em DCG/cota aberta, que aceitam qualquer
+                disciplina — então podem ter sido gastas justamente nas obrigatórias que faltam em
+                outro curso. Desligue para ver o cenário sem essa escolha.
+              </p>
+            </>
           )}
 
           <div className="divider" />

@@ -49,6 +49,7 @@ export default function App() {
   const [concluidoAte, setConcluidoAte] = useState<number | null>(null)
   const [overrides, setOverrides] = useState<Map<number, boolean>>(new Map())
   const [extras, setExtras] = useState<Set<number>>(new Set())
+  const [estrategica, setEstrategica] = useState(true)
   const [alvosRede, setAlvosRede] = useState(8)
   const [redeOrdem, setRedeOrdem] = useState<'aproveitamento' | 'baratos'>('aproveitamento')
 
@@ -83,8 +84,8 @@ export default function App() {
 
   const scores = useMemo(() => {
     if (!universo || !base || !done) return []
-    return rankCourses(universo, done)
-  }, [universo, base, done])
+    return rankCourses(universo, done, { estrategica })
+  }, [universo, base, done, estrategica])
 
   const scoreAlvo = useMemo(() => {
     if (!universo || !alvo || !done) return null
@@ -200,6 +201,8 @@ export default function App() {
             addExtra={addExtra}
             removeExtra={removeExtra}
             done={done}
+            estrategica={estrategica}
+            setEstrategica={setEstrategica}
           />
 
           {base && melhores.length > 0 && (

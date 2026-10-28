@@ -182,3 +182,28 @@ funcionando — só vai ter mais dado.
 Ver `docs/plano.md` §8 (Fase 7): FastAPI + Jinja2, Cytoscape.js para o grafo,
 Chart.js para gráficos, **bibliotecas vendorizadas** em `web/static/vendor/`
 (nada de CDN — funciona offline), tema escuro por padrão.
+
+> **Atualização (frente B, 2026-10-28):** a dashboard foi feita 100% no cliente
+> (`web/`, React + sql.js + Cytoscape), sem FastAPI. Ver `docs/frontend.md`.
+
+---
+
+## 9. Achado da frente B: equivalências gravadas sem a disciplina
+
+`equivalencia_item` está com **4.862 linhas** e **todas** com
+`disciplina_req_id = NULL` e `disciplina_req_codigo = NULL`. O payload cru tem o
+dado: cada item traz `"disciplina": {"id": ..., "codigo": ...}`. O parser em
+`ufsm_speedrun/relacoes.py` (~linha 52) lê `item.get("disciplinaRequisito")`,
+que é o campo dos **pré-requisitos**; em equivalências o campo é `disciplina`.
+
+```python
+req = item.get("disciplinaRequisito") or item.get("disciplina") or {}
+```
+
+Não precisa de novo crawl: `data/raw/curso_equivalenciasAgrupadas/` já tem
+4.687 respostas com **5.007 pares** de equivalência. Reprocessar o raw e
+reexportar o `.db` basta. Ganho medido (a partir de CC): SI 14/37 obrigatórias
+cobertas, Eng. Computação 9, Eng. Produção 6.
+
+O `prereq_*` está correto: 3.071 de 3.101 ofertas com `tem_prereq = 1` já têm
+blocos.

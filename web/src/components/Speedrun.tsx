@@ -167,6 +167,16 @@ export function SpeedrunView({ universo, base, done, onOpenCurso }: Props) {
               anos). É um exercício de limite, não um plano de vida — o valor está em saber qual
               curso rende mais por semestre.
             </li>
+            {dados.dcgEstrategica.length > 0 && (
+              <li>
+                <b>{dados.dcgEstrategica.length}</b> obrigatórias de outros cursos entraram como{' '}
+                <b>DCG do seu curso</b> (
+                {horas(dados.dcgEstrategica.reduce((s, d) => s + d.ch, 0))}):{' '}
+                {dados.dcgEstrategica.slice(0, 6).map((d) => d.codigo).join(', ')}
+                {dados.dcgEstrategica.length > 6 ? '…' : ''}. É a jogada que encurta o próximo
+                curso sem fazer nada a mais.
+              </li>
+            )}
           </ul>
         </div>
         <div className="panel">

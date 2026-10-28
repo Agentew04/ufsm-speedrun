@@ -29,6 +29,8 @@ export interface Speedrun {
   semestres: number
   carga: number
   gargalos: Gargalo[]
+  /** obrigatórias de outros currículos que entraram como DCG do curso-base */
+  dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[]
   unicas: number
   compartilhadas: number
   /** custo concentrado: quantos passos concentram 50% das horas */
@@ -41,6 +43,9 @@ interface Margem {
   missing: Oferta[]
   horas: number
   picks: number[]
+  /** obrigatórias cobertas pelas horas livres (DCG) do curso-base */
+  cobertos: Oferta[]
+  livreUsado: number
 }
 
 function chDe(universo: Universe, id: number): number {
@@ -56,6 +61,8 @@ function margem(
   target: CourseModel,
   pool: Set<number>,
   poolCh: number,
+  livreAberto: number,
+  livreFechado: number,
   cursosDe: (id: number) => number,
 ): Margem {
   let coveredCh = 0
@@ -74,7 +81,25 @@ function margem(
     missing.push(o)
   }
 
-  let surplus = poolCh - coveredCh
+  // horas de DCG/cota aberta ainda não gastas também podem cobrir obrigatórias
+  let livre = livreAberto
+  const cobertos: Oferta[] = []
+  if (livre > 0 && missing.length) {
+    const ordenado = [...missing].sort((a, b) => b.ch - a.ch)
+    const resto: Oferta[] = []
+    for (const o of ordenado) {
+      if (o.ch <= livre) {
+        livre -= o.ch
+        cobertos.push(o)
+      } else {
+        resto.push(o)
+      }
+    }
+    missing.length = 0
+    missing.push(...resto)
+  }
+
+  let surplus = livre + livreFechado + poolCh - coveredCh
   let horas = 0
   const picks = new Set<number>()
 
@@ -117,7 +142,7 @@ function margem(
   for (const o of missing) horas += o.ch
   for (const p of picks) horas += chDe(universo, p)
 
-  return { missing, horas, picks: [...picks] }
+  return { missing, horas, picks: [...picks], cobertos, livreUsado: livreAberto - livre }
 }
 
 /**
@@ -129,9 +154,11 @@ function margem(
  */
 export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   const pool = new Set<number>(done.ids)
-  let poolCh = done.freeHoras
+  let poolCh = 0
   for (const ch of done.chOf.values()) poolCh += ch
-  const horasBase = poolCh
+  let livreAberto = done.freeAberto
+  const livreFechado = Math.max(0, done.freeHoras - done.freeAberto)
+  const horasBase = poolCh + livreAberto + livreFechado
 
   const cursos = universo.cursos
   const cargas = cursos.map((c) => c.cargaSemestre).sort((a, b) => a - b)
@@ -139,6 +166,15 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
 
   // quantos cursos listam a disciplina (para escolher candidatas de cota)
   const cursosDe = (id: number) => universo.cursosByDisc.get(id)?.length ?? 0
+
+  // estatística de compartilhamento (baseada nas obrigatórias, não nas cotas)
+  const emQuantos = new Map<number, number>()
+  for (const c of cursos) {
+    for (const o of c.fixed) emQuantos.set(o.discId, (emQuantos.get(o.discId) ?? 0) + 1)
+  }
+
+  // obrigatórias de outros currículos que entraram como DCG do curso-base
+  const dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[] = []
 
   const restantes = new Set<number>(cursos.map((c) => c.curso.id))
   const porId = new Map(cursos.map((c) => [c.curso.id, c]))
@@ -153,7 +189,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     for (const id of restantes) {
       const target = porId.get(id)
       if (!target) continue
-      const m = margem(universo, target, pool, poolCh, cursosDe)
+      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, cursosDe)
       const chave = m.horas + m.missing.length * 1e-3 + target.curso.id * 1e-9
       if (chave < melhorChave) {
         melhorChave = chave
@@ -164,6 +200,16 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
 
     const curso = porId.get(melhorId)
     if (!curso || !melhor) break
+
+    // a cota de DCG do curso-base "materializa" obrigatórias do alvo
+    livreAberto -= melhor.livreUsado
+    for (const o of melhor.cobertos) {
+      if (pool.has(o.discId)) continue
+      pool.add(o.discId)
+      poolCh += o.ch
+      const d = universo.disciplinas.get(o.discId)
+      dcgEstrategica.push({ discId: o.discId, codigo: o.codigo, nome: d?.nome ?? o.nome, ch: o.ch })
+    }
 
     for (const o of melhor.missing) {
       if (pool.has(o.discId)) continue
@@ -189,10 +235,6 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   }
 
   // estatística de compartilhamento (baseada nas obrigatórias, não nas cotas)
-  const emQuantos = new Map<number, number>()
-  for (const c of cursos) {
-    for (const o of c.fixed) emQuantos.set(o.discId, (emQuantos.get(o.discId) ?? 0) + 1)
-  }
   let unicas = 0
   let compartilhadas = 0
   for (const id of pool) {
@@ -236,6 +278,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     semestres: Math.ceil(totalHoras / carga),
     carga,
     gargalos,
+    dcgEstrategica,
     unicas,
     compartilhadas,
     metadeEm,
