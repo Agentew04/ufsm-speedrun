@@ -283,7 +283,8 @@ def _montar_curso(
 
 
 # ------------------------------------------------------------------- score
-def make_done(curso: Curso, concluido_ate: int | None = None) -> Done:
+def make_done(curso: Curso, concluido_ate: int | None = None,
+              dcg: str = "aberta") -> Done:
     ids: set[int] = set()
     ch_of: dict[int, int] = {}
     for o in curso.fixed:
@@ -302,7 +303,11 @@ def make_done(curso: Curso, concluido_ate: int | None = None) -> Done:
             continue
         h = round(q.horas * fracao)
         free_horas += h
-        if not q.residual and q.kind in ("dcg", "livre"):
+        # DCG com menu listado não é hora livre: só vale o que está no menu.
+        aberta = q.kind == "livre" or (
+            q.kind == "dcg" and (dcg == "aberta" or not q.candidatos)
+        )
+        if not q.residual and aberta:
             free_aberto += h
     return Done(ids, free_horas, free_aberto, ch_of)
 
@@ -320,7 +325,7 @@ def _prereq_ok(curso: Curso, disc_id: int, disponiveis: set[int]) -> bool:
     )
 
 
-def score(curso: Curso, done: Done) -> dict:
+def score(curso: Curso, done: Done, dcg: str = "aberta") -> dict:
     """Port de scoreCourse (web/src/lib/plan.ts:143) sem agenda."""
     cobertas_por_equiv: set[int] = set()
     for alvo, substitutos in curso.equivals.items():
@@ -369,8 +374,11 @@ def score(curso: Curso, done: Done) -> dict:
     for q in curso.quotas:
         if q.kind == "atividade":
             continue
+        kind = q.kind
+        if kind == "dcg" and dcg == "menu" and q.candidatos:
+            kind = "eletiva"          # menu fechado: só vale o que está listado
         coberto = 0
-        if q.kind == "eletiva":
+        if kind == "eletiva":
             for cand in q.candidatos:
                 if coberto >= q.horas:
                     break
@@ -397,7 +405,8 @@ def score(curso: Curso, done: Done) -> dict:
 
 
 # ------------------------------------------------------------------ guloso
-def build_speedrun(cursos: list[Curso], base: Curso, done: Done) -> dict:
+def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
+                   dcg: str = "aberta") -> dict:
     """Port de buildSpeedrun (web/src/lib/speedrun.ts:155)."""
     pool = set(done.ids)
     pool_ch = sum(done.ch_of.values())
@@ -417,7 +426,7 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done) -> dict:
     while restantes:
         melhor_id, melhor, melhor_chave = None, None, float("inf")
         for cid, target in restantes.items():
-            m = _margem(target, pool, pool_ch, livre_aberto, livre_fechado, cursos_de)
+            m = _margem(target, pool, pool_ch, livre_aberto, livre_fechado, cursos_de, dcg)
             chave = m["horas"] + len(m["missing"]) * 1e-3 + cid * 1e-9
             if chave < melhor_chave:
                 melhor_chave, melhor, melhor_id = chave, m, cid
@@ -456,7 +465,8 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done) -> dict:
 
 
 def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
-            livre_fechado: int, cursos_de: dict[int, int]) -> dict:
+            livre_fechado: int, cursos_de: dict[int, int],
+            dcg: str = "aberta") -> dict:
     """Port de margem (web/src/lib/speedrun.ts:59)."""
     covered_ch = 0
     missing = []
@@ -488,8 +498,11 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
     for q in target.quotas:
         if q.kind == "atividade":
             continue
+        kind = q.kind
+        if kind == "dcg" and dcg == "menu" and q.candidatos:
+            kind = "eletiva"
         coberto = 0
-        if q.kind == "eletiva":
+        if kind == "eletiva":
             for cand in q.candidatos:
                 if coberto >= q.horas:
                     break
@@ -505,7 +518,7 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
         falta = q.horas - coberto
         if falta <= 0:
             continue
-        if q.kind == "eletiva" and q.candidatos:
+        if kind == "eletiva" and q.candidatos:
             cands = sorted(
                 (c for c in q.candidatos if c not in pool),
                 key=lambda c: -cursos_de.get(c, 0),
@@ -528,7 +541,8 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
 
 # --------------------------------------------------------------- benchmark
 def run(conn: sqlite3.Connection, base_id: int | None = None,
-        com_julgadas: bool = True, exportar: bool = True) -> dict:
+        com_julgadas: bool = True, exportar: bool = True,
+        dcg: str = "aberta") -> dict:
     from . import db as _db
 
     _db.migrar(conn)
@@ -544,8 +558,9 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     print(f"  cursos carregados ........ {len(cursos)}")
     print(f"  base ..................... {base.nome} ({base.ch_total} h)")
     print(f"  equivalências ............. {'oficial + julgada' if com_julgadas else 'só oficial'}")
+    print(f"  política de DCG ........... {dcg}")
 
-    done = make_done(base)
+    done = make_done(base, dcg=dcg)
     print(f"  disciplinas concluídas ... {len(done.ids)}")
     print(f"  horas livres ............. {done.free_horas} h "
           f"(abertas: {done.free_aberto} h)")
@@ -558,7 +573,7 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     for alvo in cursos:
         if alvo.id == base.id:
             continue
-        s = score(alvo, done)
+        s = score(alvo, done, dcg=dcg)
         linhas.append((base.id, alvo.id, s["extra_horas"], s["extra_disciplinas"],
                        s["semestres"], agora))
     conn.executemany(
@@ -568,7 +583,7 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     )
 
     print("  rodando o guloso…", flush=True)
-    rota = build_speedrun(cursos, base, done)
+    rota = build_speedrun(cursos, base, done, dcg=dcg)
     conn.execute("DELETE FROM rota_gulosa")
     conn.executemany(
         "INSERT INTO rota_gulosa (ordem, curso_id, horas_passo, horas_acum, semestre, "
@@ -589,6 +604,7 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
             "base_curso_id": base.id,
             "base": base.nome,
             "com_julgadas": com_julgadas,
+            "dcg": dcg,
             "carga_semestre": base.carga_semestre,
             "total_disc": rota["total_disc"],
             "total_horas": rota["total_horas"],

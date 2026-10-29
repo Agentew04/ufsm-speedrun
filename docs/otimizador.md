@@ -151,7 +151,45 @@ Rota que fecha os 145 cursos (base = Ciência da Computação):
 - serve de teste de regressão: se a coleta mudar, os números mudam e a divergência
   aparece antes de chegar no usuário
 
-## 7. Números para calibrar
+## 8. Política de DCG (menu fechado vs cota aberta)
+
+O modelo atual trata toda cota de DCG como **"qualquer disciplina do catálogo"**.
+Os dados dizem que isso é exceção, não regra:
+
+| situação | quantidade |
+|---|---|
+| estruturas de DCG **com menu listado** | **129** |
+| cotas realmente abertas (sem disciplinas, sem atividades) | 21 (só 2 são DCG) |
+
+O DCG de Ciência da Computação/2024, por exemplo, é um menu de **57 disciplinas**
+— 38 dos departamentos de computação, 4 de administração, 3 de física, 3 de
+letras, 2 de educação. Música não está lá.
+
+Ou seja: **respeitar o menu resolve o caso real**. A heurística de "mesma área"
+seria pior que o menu — excluiria as 4 disciplinas de Administração aprovadas e
+não impediria nada que o menu já não impeça.
+
+### Impacto medido
+
+| política | disciplinas na rota | horas |
+|---|---|---|
+| `aberta` (atual do front) | 4.991 | 301.480 |
+| `menu` | 5.176 | 312.265 |
+
+**+185 disciplinas e +10.785 h** (+3,6%). Por curso, o efeito é o bloco de DCG
+deixar de ser curinga: `Música - Bacharelado` sai de 810 h para 1.290 h de
+Ciência da Computação; `Sistemas de Informação`, de 900 h para 1.380 h.
+
+Implementado como flag no auditor:
+
+```powershell
+python -m ufsm_speedrun auditar --dcg menu
+```
+
+Para as ~2 cotas de DCG realmente abertas (SI/2026: 420 h sem lista), aí sim cabe
+uma regra de área — mas como sugestão explícita, nunca como default silencioso.
+
+
 
 ```
 cursos ........................ 148  (2 são ABI/núcleo comum)

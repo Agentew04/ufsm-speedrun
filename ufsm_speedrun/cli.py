@@ -327,7 +327,7 @@ def cmd_auditar(args: argparse.Namespace) -> int:
         if args.front:
             return auditor.comparar(conn, Path(args.front))
         resultado = auditor.run(conn, base_id=args.base,
-                                com_julgadas=not args.sem_julgadas)
+                                com_julgadas=not args.sem_julgadas, dcg=args.dcg)
         print(f"\n  top 10 mais baratos de fechar a partir de {resultado['base'].nome}:")
         ranking = conn.execute(
             """
@@ -482,6 +482,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base", type=int, default=None, help="id do curso-base (padrão: Ciência da Computação)")
     p.add_argument("--sem-julgadas", action="store_true",
                    help="usar só as equivalências oficiais (padrão: oficial + julgadas)")
+    p.add_argument("--dcg", choices=("aberta", "menu"), default="aberta",
+                   help="'aberta' = DCG aceita qualquer disciplina (comportamento atual do front); "
+                        "'menu' = DCG com lista só aceita o que está na lista")
     p.add_argument("--front", default=None,
                    help="JSON exportado pelo front para comparar as duas implementações")
     p.set_defaults(func=cmd_auditar)
