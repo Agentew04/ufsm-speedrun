@@ -80,6 +80,11 @@ def _pares_prioritarios(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         WHERE se.veredito = 'revisar'
           AND se.score_final >= 0.60
           AND se.motivo NOT LIKE '%sequ%'
+          AND NOT EXISTS (
+              SELECT 1 FROM equivalencia_julgada ej
+              WHERE ej.disciplina_a = se.disciplina_a
+                AND ej.disciplina_b = se.disciplina_b
+          )
         ORDER BY se.score_final DESC
         """
     ).fetchall()

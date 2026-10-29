@@ -116,11 +116,11 @@ heurística nunca é sobrescrito, então dá para comparar os dois e re-julgar.
 
 | veredito | pares | confiança média |
 |---|---|---|
-| equivalente | **233** | 0,75 |
-| parcial | 193 | 0,58 |
-| nao_equivalente | 36 | 0,53 |
+| equivalente | **478** | 0,73 |
+| parcial | 323 | 0,53 |
+| nao_equivalente | 142 | 0,49 |
 
-Dos 233 confirmados, a maioria fora do SIE é **presencial × EaD** da mesma
+Dos 478 confirmados, a maioria fora do SIE é **presencial × EaD** da mesma
 disciplina — exatamente o tipo de par que o SIE não declara e que rende
 aproveitamento:
 
@@ -160,13 +160,17 @@ O que os dados pedem:
 ## 6. Resultado atual
 
 ```
-pares candidatos ........... 68.607
-equivalência automática .... 2.325
-banda de revisão ........... 58.419   (462 prioritários)
-descartados ................ 7.863
-recall sobre as oficiais ... 8,0%  (41% entre as que viraram candidatas)
-tempo ...................... ~10 s
+pares candidatos ........... 90.399
+equivalência automática .... 4.829
+banda de revisão ........... 77.627   (861 prioritários · 943 julgados no total)
+descartados ................ 7.943
+recall sobre as oficiais ... 31,7%  (42% entre as que viraram candidatas)
+tempo ...................... ~15 s
 ```
+
+> A rodada 2 (depois de baixar as ementas que faltavam) dobrou tudo: candidatos
+> 68,6k → 90,4k, automáticos 2,3k → 4,8k, e o recall sobre as equivalências
+> oficiais saltou de 8,0% para **31,7%**. Era só falta de texto dos dois lados.
 
 Exemplos de descoberta (mesmo nome, mesma CH, ementa idêntica, código diferente):
 

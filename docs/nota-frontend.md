@@ -30,8 +30,11 @@ FROM v_equivalencia_efetiva;
 - `veredito`: `equivalente` | `parcial`
 
 **Ganho medido no auditor**: incluindo as julgadas, a rota que fecha os 145
-cursos cai de **5.144 → 4.991 disciplinas** e de **309.175 h → 301.480 h**
-(−153 disciplinas, −7.695 h).
+cursos cai de **5.144 → 4.981 disciplinas** e de **309.175 h → 301.180 h**
+(−163 disciplinas, −7.995 h).
+
+Estado atual: **943 pares julgados** (478 `equivalente`, 323 `parcial`,
+142 `nao_equivalente`).
 
 Sugestão de UI: badge `oficial` / `julgada (conf. 0,9)` no card da equivalência, e
 tratar `parcial` como sinal mais fraco (não somar no `fixedEquiv` sem avisar).

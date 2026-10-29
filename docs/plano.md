@@ -248,9 +248,12 @@ formato). Nenhum par ficou de fora.
 
 | veredito | pares | confiança média |
 |---|---|---|
-| equivalente | **233** | 0,75 |
-| parcial | 193 | 0,58 |
-| nao_equivalente | 36 | 0,53 |
+| equivalente | **478** | 0,73 |
+| parcial | 323 | 0,53 |
+| nao_equivalente | 142 | 0,49 |
+
+Duas rodadas de adjudicação (462 + 481 pares), 10 subagentes cada. A segunda só
+foi necessária porque as ementas que faltavam criaram candidatos novos.
 
 Persistido em **`equivalencia_julgada`** (tabela separada — o palpite da heurística
 nunca é sobrescrito, então dá para comparar e re-julgar). A maioria dos

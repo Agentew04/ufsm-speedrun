@@ -264,7 +264,8 @@ def checar_julgamento(conn: sqlite3.Connection) -> Achado:
     return Achado(
         "Adjudicação da banda prioritária (Fase 6b)",
         "atencao" if orfaos else "ok",
-        f"{total} pares julgados ({resumo})" + (f" · {orfaos} fora do palpite atual" if orfaos else ""),
+        f"{total} pares julgados ({resumo})" + (
+            f" · {orfaos} fora da banda atual (seguem válidos na view)" if orfaos else ""),
     )
 
 
