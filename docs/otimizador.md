@@ -189,7 +189,7 @@ python -m ufsm_speedrun auditar --dcg menu
 Para as ~2 cotas de DCG realmente abertas (SI/2026: 420 h sem lista), aí sim cabe
 uma regra de área — mas como sugestão explícita, nunca como default silencioso.
 
-
+## 9. Números para calibrar
 
 ```
 cursos ........................ 148  (2 são ABI/núcleo comum)
