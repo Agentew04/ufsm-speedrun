@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DB_MAGIC } from '../db/load'
+import { isSqlite, paraSqlite } from '../db/load'
 
 interface Props {
   onBytes: (bytes: ArrayBuffer, nome: string) => void
@@ -7,7 +7,9 @@ interface Props {
   mensagem: string | null
 }
 
-const AUTO_URL = new URLSearchParams(location.search).get('db') ?? './ufsm.db'
+const PARAM_DB = new URLSearchParams(location.search).get('db')
+// o núcleo publicado é um .gz de ~2 MB; o .db é o fallback (dev/local)
+const AUTO_URLS = PARAM_DB ? [PARAM_DB] : ['./ufsm.db.gz', './ufsm.db']
 
 export function DbGate({ onBytes, status, mensagem }: Props) {
   const [drag, setDrag] = useState(false)
@@ -16,13 +18,17 @@ export function DbGate({ onBytes, status, mensagem }: Props) {
   const autoRef = useRef(false)
 
   const abrir = useCallback(async (file: File) => {
-    const bytes = await file.arrayBuffer()
-    const head = new TextDecoder('latin1').decode(bytes.slice(0, 16))
-    if (!head.startsWith(DB_MAGIC)) {
-      window.alert('Esse arquivo não parece um SQLite (esperado "SQLite format 3").')
-      return
+    try {
+      const bytes = await paraSqlite(await file.arrayBuffer())
+      if (!isSqlite(bytes)) {
+        window.alert('Esse arquivo não parece um SQLite (esperado "SQLite format 3" ou .db.gz).')
+        return
+      }
+      onBytes(bytes, file.name)
+    } catch (err) {
+      console.error(err)
+      window.alert('Não consegui descomprimir/abrir esse arquivo.')
     }
-    onBytes(bytes, file.name)
   }, [onBytes])
 
   useEffect(() => {
@@ -31,16 +37,19 @@ export function DbGate({ onBytes, status, mensagem }: Props) {
     if (autoRef.current) return
     autoRef.current = true
     ;(async () => {
-      try {
-        const res = await fetch(AUTO_URL, { cache: 'no-store' })
-        if (!res.ok) throw new Error(String(res.status))
-        const bytes = await res.arrayBuffer()
-        const head = new TextDecoder('latin1').decode(bytes.slice(0, 16))
-        if (!head.startsWith(DB_MAGIC)) throw new Error('não é sqlite')
-        onBytes(bytes, AUTO_URL)
-      } catch {
-        setAutoFalhou(true)
+      for (const url of AUTO_URLS) {
+        try {
+          const res = await fetch(url, { cache: 'no-store' })
+          if (!res.ok) continue
+          const bytes = await paraSqlite(await res.arrayBuffer())
+          if (!isSqlite(bytes)) continue
+          onBytes(bytes, url)
+          return
+        } catch {
+          /* tenta o próximo */
+        }
       }
+      setAutoFalhou(true)
     })()
   }, [onBytes])
 
@@ -110,21 +119,22 @@ export function DbGate({ onBytes, status, mensagem }: Props) {
         <div className="gate-foot">
           {autoFalhou && (
             <span className="dim">
-              Não achei <code>{AUTO_URL}</code> ao lado da página. Coloque o arquivo ali (ou use{' '}
-              <code>?db=caminho</code>) e recarregue.
+              Não achei <code>./ufsm.db.gz</code> nem <code>./ufsm.db</code> ao lado da página.
+              Coloque o arquivo ali (ou use <code>?db=caminho</code>) e recarregue.
             </span>
           )}
           {mensagem && status === 'error' && <span className="err">{mensagem}</span>}
           <span className="dim">
-            Esperado: <code>data/ufsm.db</code> do projeto — 148 cursos, 528 versões, 12.313 ofertas.
-            Sem escritas: o banco é aberto só para leitura.
+            Esperado: <code>data/public/ufsm-web.db.gz</code> (núcleo enxuto, ~2 MB) — o script de
+            snapshot copia o <code>.db</code> e o <code>.gz</code> para cá. Sem escritas: o banco é
+            aberto só para leitura.
           </span>
         </div>
 
         <div className="gate-tips">
           <div>
-            <b>1.</b> No projeto, rode{' '}
-            <code>python web/scripts/snapshot-db.py</code> para copiar o banco com o WAL já aplicado.
+            <b>1.</b> No projeto, rode <code>python web/scripts/snapshot-db.py</code> (usa o núcleo
+            publicado em <code>data/public/ufsm-web.db</code>).
           </div>
           <div>
             <b>2.</b> Sirva a pasta com <code>npm run dev</code> (ou <code>python -m http.server</code> em{' '}

@@ -237,9 +237,9 @@ export default function App() {
 
           <div className="panel foot-note">
             <span className="tiny dim">
-              {universo.meta.comEmenta} disciplinas com ementa indexada
-              {universo.meta.comEmenta / Math.max(1, universo.meta.disciplinas) < 0.5 &&
-                ' — coleta da fase 4 em andamento'}
+              {universo.meta.comEmenta > 0
+                ? `${num(universo.meta.comEmenta)} disciplinas com ementa no banco`
+                : 'núcleo enxuto: ementas em banco separado (sob demanda)'}
             </span>
           </div>
         </aside>

@@ -23,6 +23,27 @@ function getSql(): Promise<SqlJsStatic> {
 
 export const DB_MAGIC = 'SQLite format 3'
 
+/** Descomprime um .gz (DecompressionStream: Edge/Chrome/Firefox modernos). */
+export async function gunzip(bytes: ArrayBuffer): Promise<ArrayBuffer> {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return await new Response(stream).arrayBuffer()
+}
+
+export function isGzip(bytes: ArrayBuffer): boolean {
+  const b = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength))
+  return b.length === 2 && b[0] === 0x1f && b[1] === 0x8b
+}
+
+export function isSqlite(bytes: ArrayBuffer): boolean {
+  const head = new TextDecoder('latin1').decode(bytes.slice(0, 16))
+  return head.startsWith(DB_MAGIC)
+}
+
+/** Normaliza o que veio do disco/rede: aceita .db e .db.gz. */
+export async function paraSqlite(bytes: ArrayBuffer): Promise<ArrayBuffer> {
+  return isGzip(bytes) ? gunzip(bytes) : bytes
+}
+
 export async function openDatabase(bytes: ArrayBuffer): Promise<Database> {
   const SQL = await getSql()
   return new SQL.Database(new Uint8Array(bytes))

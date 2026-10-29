@@ -19,8 +19,11 @@ sozinho**.
 - Nada é escrito no banco: a `Database` do sql.js é uma cópia em memória.
 
 Consequência prática: o deploy é arrastar `dist/` para qualquer host (ou abrir
-com um servidor estático local). O único cuidado é o WAL — use
-`web/scripts/snapshot-db.py`, que copia via backup API do SQLite.
+com um servidor estático local). O front baixa o **núcleo publicado**
+(`data/public/ufsm-web.db.gz`, 2,1 MB) e descomprime no browser
+(`DecompressionStream`); o `.db` completo (51 MB) fica como fallback de
+desenvolvimento. Ementas e bibliografias vivem em bancos separados
+(`ementas.db`, `bibliografias.db`) e não entram no otimizador.
 
 ## 2. Modelo em memória
 
@@ -303,3 +306,23 @@ Outras diferenças conhecidas de definição:
 Para o auditor: vale investigar por que `_margem(1250)` no passo 1 é maior que
 `score(1250)` (1.260 h) — é o que faz a primeira escolha divergir.
 
+
+## 10. Artefatos publicados (Fase 6d)
+
+`python -m ufsm_speedrun publicar` gera em `data/public/`:
+
+| arquivo | tamanho | quando o front baixa |
+|---|---|---|
+| `ufsm-web.db.gz` | 2,1 MB | boot |
+| `ementas.db.gz` | 4,1 MB | ao abrir a cadeira (não implementado) |
+| `bibliografias.db.gz` | 4,2 MB | ao expandir bibliografia (não implementado) |
+| `manifest.json` | — | metadados |
+
+O núcleo tem todas as tabelas do otimizador (`dcg_elegivel`, `eh_terminal`,
+`v_equivalencia_efetiva`, `eh_nucleo_comum`) e **não tem texto**: os campos
+`programa_texto`/`objetivos_html`/`bibliografia_texto` vêm `NULL`. O front baixa
+o `.gz` e descomprime com `DecompressionStream` (sem pako), com fallback para
+`./ufsm.db`; drag & drop aceita os dois.
+
+`web/scripts/snapshot-db.py` copia o `.db` e o `.gz` publicados para
+`web/public/` (e cai para `data/ufsm.db` se `data/public/` não existir).

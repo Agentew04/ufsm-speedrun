@@ -15,6 +15,7 @@ dist-ssr
 # banco gerado pelo snapshot-db.py (data/ nunca entra no git)
 public/ufsm.db
 public/*.db
+public/*.db.gz
 public/*.db-wal
 public/*.db-shm
 

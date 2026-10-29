@@ -8,11 +8,10 @@ UFSM, sem telemetria — com o Wi-Fi desligado funciona igual.
 ## Rodar
 
 ```powershell
-# 0. se o banco da coleta for antigo, qualquer comando do coletor aplica as
-#    migrações de schema (colunas novas, views). Depois reexporte:
-python -m ufsm_speedrun stats
+# 0. depois da coleta, gera os artefatos enxutos em data/public/
+python -m ufsm_speedrun publicar
 
-# 1. copia o banco com o WAL já aplicado -> web/public/ufsm.db
+# 1. copia o núcleo publicado (data/public/ufsm-web.db + .gz) -> web/public/
 python web/scripts/snapshot-db.py
 
 # 2. dev server
@@ -23,6 +22,11 @@ npm run dev        # http://localhost:5173
 # 3. build estático (dist/ serve em qualquer host, inclusive offline)
 npm run build
 ```
+
+Se o núcleo publicado não existir, o script copia `data/ufsm.db` completo
+(51 MB). O front tenta `./ufsm.db.gz` (2,1 MB) e cai para `./ufsm.db`; os dois
+funcionam no drag & drop. Ementas e bibliografias vêm em bancos separados e não
+são usadas pelo otimizador.
 
 Se `public/ufsm.db` não existir, a tela inicial pede o arquivo (arrastar e
 soltar também funciona). Dá para apontar outro banco com `?db=./caminho.db`.

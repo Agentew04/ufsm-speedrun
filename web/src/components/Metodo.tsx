@@ -134,9 +134,19 @@ export function Metodo({ universo }: { universo: Universe }) {
           </div>
         </div>
         <p className="note tiny">
-          {num(universo.meta.comEmenta)} de {num(universo.meta.disciplinas)} disciplinas com ementa (
-          {pct(universo.meta.comEmenta / Math.max(1, universo.meta.disciplinas))}) — a fase 6a ainda
-          não usa similaridade de ementa; só a equivalência oficial.
+          {universo.meta.comEmenta > 0 ? (
+            <>
+              {num(universo.meta.comEmenta)} de {num(universo.meta.disciplinas)} disciplinas com
+              ementa ({pct(universo.meta.comEmenta / Math.max(1, universo.meta.disciplinas))}) — a
+              fase 6a ainda não usa similaridade de ementa; só a equivalência oficial/julgada.
+            </>
+          ) : (
+            <>
+              Núcleo enxuto: as ementas ficam em <code>ementas.db</code> (e a bibliografia em{' '}
+              <code>bibliografias.db</code>), carregadas sob demanda. O otimizador não depende
+              delas.
+            </>
+          )}
         </p>
         {(universo.meta.coberturaPrereq < 0.99 || universo.meta.coberturaEquiv < 0.99) && (
           <p className="note tiny">
