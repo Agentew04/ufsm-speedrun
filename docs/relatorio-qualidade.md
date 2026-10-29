@@ -1,6 +1,6 @@
 # Relatório de qualidade dos dados
 
-Gerado em 2026-10-29T00:40:05Z por `python -m ufsm_speedrun validar`.
+Gerado em 2026-10-29T00:53:15Z por `python -m ufsm_speedrun validar`.
 
 | | verificação | situação |
 |---|---|---|
@@ -14,6 +14,7 @@ Gerado em 2026-10-29T00:40:05Z por `python -m ufsm_speedrun validar`.
 | ⚠️ | Pré-requisitos e equivalências (Fase 3) | 6031/12313 ofertas com flag · 6031 com relação gravada · 0 pendentes · 4649 arestas de prereq · 5008 itens de equivalência · ❗ 0 prereq e 5 equivalências sem disciplina referenciada |
 | ⚠️ | Cotas abertas (sem disciplinas e sem atividades) | 21 cota(s) — precisam de tratamento explícito no otimizador |
 | ⚠️ | Adjudicação da banda prioritária (Fase 6b) | 943 pares julgados (equivalente: 478, parcial: 323, nao_equivalente: 142) · 76 fora da banda atual (seguem válidos na view) |
+| ✅ | Elegibilidade de DCG | 129 cotas · 15209 pares · 4657 por menu · 1 abertas |
 
 ## ✅ Integridade referencial
 
@@ -77,6 +78,10 @@ Gerado em 2026-10-29T00:40:05Z por `python -m ufsm_speedrun validar`.
 ## ⚠️ Adjudicação da banda prioritária (Fase 6b)
 
 943 pares julgados (equivalente: 478, parcial: 323, nao_equivalente: 142) · 76 fora da banda atual (seguem válidos na view)
+
+## ✅ Elegibilidade de DCG
+
+129 cotas · 15209 pares · 4657 por menu · 1 abertas
 
 ---
 

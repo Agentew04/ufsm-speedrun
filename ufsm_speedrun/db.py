@@ -100,6 +100,14 @@ def migrar(conn: sqlite3.Connection) -> None:
             calculado_em   TEXT,
             PRIMARY KEY (base_curso_id, alvo_curso_id)
         );
+        CREATE TABLE IF NOT EXISTS dcg_elegivel (
+            curso_id      INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+            estrutura_id  INTEGER NOT NULL REFERENCES estrutura(id) ON DELETE CASCADE,
+            disciplina_id INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+            fonte         TEXT NOT NULL,
+            horas_cota    INTEGER,
+            PRIMARY KEY (curso_id, estrutura_id, disciplina_id)
+        );
         """
     )
 
@@ -113,6 +121,12 @@ def migrar(conn: sqlite3.Connection) -> None:
     if colunas_curso and "eh_nucleo_comum" not in colunas_curso:
         conn.execute("ALTER TABLE curso ADD COLUMN eh_nucleo_comum INTEGER NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE curso ADD COLUMN nucleo_comum_motivo TEXT")
+
+    colunas_disc = {r[1] for r in conn.execute("PRAGMA table_info(disciplina)")}
+    if colunas_disc and "eh_terminal" not in colunas_disc:
+        conn.execute("ALTER TABLE disciplina ADD COLUMN eh_terminal INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE disciplina ADD COLUMN terminal_categoria TEXT")
+        conn.execute("ALTER TABLE disciplina ADD COLUMN terminal_motivo TEXT")
 
     conn.executescript(VIEW_EQUIVALENCIA)
     conn.commit()

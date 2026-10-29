@@ -14,7 +14,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from . import (auditor, config, curriculos, db, discover, ementas, endpoints,
+from . import (auditor, config, curriculos, db, dcg, discover, ementas, endpoints,
                equivalencia, julgamento, relacoes, validacao)
 from .classificacao import classificar as classificar_cursos
 from .http import UfsmClient
@@ -318,6 +318,19 @@ def cmd_classificar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_dcg(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        dcg.construir(conn)
+        dcg.relatorio(conn)
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_auditar(args: argparse.Namespace) -> int:
     if not Path(config.DB_PATH).exists():
         print(f"banco não existe em {config.DB_PATH} — rode: init-db")
@@ -477,6 +490,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("classificar", help="marca cursos ABI/núcleo comum no banco")
     p.set_defaults(func=cmd_classificar)
+
+    p = sub.add_parser("dcg", help="materializa quais disciplinas podem preencher cada cota de DCG")
+    p.set_defaults(func=cmd_dcg)
 
     p = sub.add_parser("auditar", help="fase 6c: auditor do otimizador (rota + benchmark)")
     p.add_argument("--base", type=int, default=None, help="id do curso-base (padrão: Ciência da Computação)")

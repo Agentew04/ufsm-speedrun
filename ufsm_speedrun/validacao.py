@@ -269,6 +269,36 @@ def checar_julgamento(conn: sqlite3.Connection) -> Achado:
     )
 
 
+def checar_dcg(conn: sqlite3.Connection) -> Achado:
+    existe = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='dcg_elegivel'"
+    ).fetchone()[0]
+    if not existe:
+        return Achado("Elegibilidade de DCG", "atencao",
+                      "tabela ainda não existe — rode: dcg")
+
+    total = _escalar(conn, "SELECT COUNT(*) FROM dcg_elegivel")
+    estruturas = _escalar(
+        conn, "SELECT COUNT(DISTINCT curso_id || '-' || estrutura_id) FROM dcg_elegivel"
+    )
+    menu = _escalar(conn, "SELECT COUNT(*) FROM dcg_elegivel WHERE fonte = 'menu'")
+    abertas = _escalar(
+        conn, "SELECT COUNT(DISTINCT curso_id || '-' || estrutura_id) FROM dcg_elegivel "
+              "WHERE fonte = 'aberta'"
+    )
+    terminais = _escalar(
+        conn,
+        "SELECT COUNT(*) FROM dcg_elegivel de JOIN disciplina d ON d.id = de.disciplina_id "
+        "WHERE d.eh_terminal = 1",
+    )
+    return Achado(
+        "Elegibilidade de DCG",
+        "problema" if terminais else "ok",
+        f"{estruturas} cotas · {total} pares · {menu} por menu · {abertas} abertas"
+        + (f" · ❗ {terminais} terminais (TCC/estágio) vazando" if terminais else ""),
+    )
+
+
 # --------------------------------------------------------------------- relatório
 def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
     destino = destino or (config.PROJECT_ROOT / "docs" / "relatorio-qualidade.md")
@@ -280,6 +310,7 @@ def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
         checar_densidade_relacoes(conn),
         checar_buckets(conn),
         checar_julgamento(conn),
+        checar_dcg(conn),
     ]
 
     icone = {"ok": "✅", "atencao": "⚠️", "problema": "❌"}

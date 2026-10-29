@@ -174,17 +174,36 @@ não impediria nada que o menu já não impeça.
 | política | disciplinas na rota | horas |
 |---|---|---|
 | `aberta` (atual do front) | 4.991 | 301.480 |
-| `menu` | 5.176 | 312.265 |
+| `menu` + terminais excluídas | **5.152** | **311.260** |
 
-**+185 disciplinas e +10.785 h** (+3,6%). Por curso, o efeito é o bloco de DCG
+**+161 disciplinas e +9.780 h (+3,2%)**. Por curso, o efeito é o bloco de DCG
 deixar de ser curinga: `Música - Bacharelado` sai de 810 h para 1.290 h de
 Ciência da Computação; `Sistemas de Informação`, de 900 h para 1.380 h.
 
-Implementado como flag no auditor:
+### Implementado
+
+Tabela **`dcg_elegivel`** materializada (`python -m ufsm_speedrun dcg`):
+
+```
+129 cotas de DCG · 15.209 pares
+  128 com menu listado (4.657 pares)
+    1 cota aberta (SI/2026, 420 h)
+```
+
+Regra: se a estrutura tem menu, só o menu vale; se não tem, qualquer disciplina
+não-terminal e ativa. Nunca as duas coisas ao mesmo tempo.
+
+E a exceção de domínio que o usuário apontou: **disciplinas terminais**
+(TCC/TCG/TG, estágio, monografia) **nunca** entram numa cota de DCG — nem no menu.
+São 594 no catálogo; 21 entradas de menu foram barradas. O TCC de SI como DCG de
+CC deixa de existir, e o TCC volta a ser obrigação de verdade.
 
 ```powershell
+python -m ufsm_speedrun classificar   # cursos ABI + disciplinas terminais
+python -m ufsm_speedrun dcg           # materializa a elegibilidade
 python -m ufsm_speedrun auditar --dcg menu
 ```
+
 
 Para as ~2 cotas de DCG realmente abertas (SI/2026: 420 h sem lista), aí sim cabe
 uma regra de área — mas como sugestão explícita, nunca como default silencioso.

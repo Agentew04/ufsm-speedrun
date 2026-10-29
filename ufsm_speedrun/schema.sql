@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS disciplina (
     programa_texto    TEXT,                  -- texto corrido, normalizado
     bibliografia_texto TEXT,                 -- tipoConteudo 1 (separado de propósito)
     documento_programa INTEGER,              -- id do PDF no portal de documentos
+    -- Disciplina "terminal": TCC/TCG/TG, estágio, monografia. Não é transferível
+    -- entre cursos, então nunca entra em cota de DCG.
+    eh_terminal       INTEGER NOT NULL DEFAULT 0,
+    terminal_categoria TEXT,                 -- tcc | estagio | monografia
+    terminal_motivo   TEXT,
     raw_file          TEXT,                  -- caminho do bruto que originou a linha
     atualizado_em     TEXT
 );
@@ -268,6 +273,21 @@ CREATE TABLE IF NOT EXISTS equivalencia_julgada (
     julgado_em    TEXT,
     PRIMARY KEY (disciplina_a, disciplina_b)
 );
+
+-- Quais disciplinas podem preencher a cota de DCG de cada curso/estrutura.
+-- `fonte`: menu = lista explícita do currículo; aberta = cota sem lista (qualquer
+-- disciplina não-terminal, respeitando a situação).
+CREATE TABLE IF NOT EXISTS dcg_elegivel (
+    curso_id      INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+    estrutura_id  INTEGER NOT NULL REFERENCES estrutura(id) ON DELETE CASCADE,
+    disciplina_id INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+    fonte         TEXT NOT NULL,             -- menu | aberta
+    horas_cota    INTEGER,
+    PRIMARY KEY (curso_id, estrutura_id, disciplina_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dcg_curso ON dcg_elegivel(curso_id, estrutura_id);
+CREATE INDEX IF NOT EXISTS idx_dcg_disc  ON dcg_elegivel(disciplina_id);
 
 -- -----------------------------------------------------------------------------
 -- Auditoria do otimizador (Fase 6c) — para alinhar Python e o front TS

@@ -96,8 +96,38 @@ implementações concordam naquele cenário.**
 O `passos` é o objeto de `buildSpeedrun`; o `benchmark` é o resultado de
 `scoreCourse` para cada alvo. Um botão "exportar diagnóstico" no modo dev resolve.
 
-## 5. Um detalhe de modelagem para vocês decidirem
+## 5. DCG: menu fechado e disciplinas terminais
 
+O modelo atual trata toda cota de DCG como "qualquer disciplina". Os dados dizem
+que isso é exceção: **129 cotas, 128 com menu listado, 1 aberta** (SI/2026, 420 h).
+
+Nova tabela **`dcg_elegivel`** (`curso_id, estrutura_id, disciplina_id, fonte,
+horas_cota`), materializada por `python -m ufsm_speedrun dcg`:
+
+```sql
+SELECT disciplina_id FROM dcg_elegivel
+WHERE curso_id = ? AND estrutura_id = ? AND fonte = 'menu';
+```
+
+- `fonte = 'menu'` → a lista explícita do currículo
+- `fonte = 'aberta'` → cota sem lista; a tabela já traz o que é elegível
+
+E a exceção de domínio: **`disciplina.eh_terminal`** marca TCC/TCG/TG, estágio e
+monografia (**594** no catálogo). Nenhuma delas aparece em `dcg_elegivel`.
+
+Isso corrige duas coisas:
+
+1. **"TCC de SI como DCG de CC" deixa de existir** — o menu do CC tem 57
+   disciplinas e nenhuma é TCC.
+2. As obrigatórias terminais do curso-alvo não podem ser "cobertas" por horas de
+   DCG do curso-base (`fixedDcg`). TCC não se dispensa por cota — você faz o TCC
+   do curso que vai receber o diploma.
+
+Impacto medido no auditor: rota **4.991 → 5.152 disciplinas**, 301.480 → 311.260 h.
+
+Se for implementar só uma coisa desta lista, é essa.
+
+## 6. Um detalhe de modelagem para vocês decidirem
 `makeDone` + `scoreCourse` permitem que horas abertas do curso-base cubram
 **qualquer** obrigatória do alvo (DCG estratégica). A regra é generosa — pela
 contagem, `Música - Bacharelado` sai a 810 h de Ciência da Computação.
