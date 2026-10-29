@@ -2,9 +2,6 @@ import type { Universe } from '../db/types'
 import { num, pct } from '../lib/format'
 
 export function Metodo({ universo }: { universo: Universe }) {
-  const total = Math.max(1, universo.meta.ofertas)
-  const cobertura = universo.meta.comPrereq / total
-
   return (
     <div className="metodo">
       <header>
@@ -91,6 +88,16 @@ export function Metodo({ universo }: { universo: Universe }) {
             <li>
               <b>Nada disso é grade oficial.</b> É uma estimativa explicável para comparar cursos.
             </li>
+            <li>
+              <b>ABI/núcleo comum</b> (ex.: "Artes Cênicas - Bacharelado", 960 h / 3 semestres) é a
+              entrada, não o diploma — o curso continua na habilitação (Direção/Interpretação,
+              2.756 h). Esses currículos ficam fora do ranking; aparecem só se você for aluno deles.
+            </li>
+            <li>
+              <b>Núcleo flexível sem cota declarada</b> (ex.: Música/Bacharelado tem 1.110 h fora
+              dos núcleos): a diferença contra <code>ch_total</code> entra como "horas do currículo
+              fora dos núcleos mapeados", em vez de sumir da conta.
+            </li>
           </ul>
         </div>
       </div>
@@ -118,15 +125,20 @@ export function Metodo({ universo }: { universo: Universe }) {
             <b>{num(universo.meta.disciplinas)}</b>
           </div>
           <div>
-            <span className="kpi-label">ofertas com pré-requisito</span>
-            <b>{pct(cobertura)}</b>
+            <span className="kpi-label">pré-requisitos coletados</span>
+            <b>{pct(universo.meta.coberturaPrereq)}</b>
           </div>
           <div>
-            <span className="kpi-label">disciplinas com ementa</span>
-            <b>{num(universo.meta.comEmenta)}</b>
+            <span className="kpi-label">equivalências coletadas</span>
+            <b>{pct(universo.meta.coberturaEquiv)}</b>
           </div>
         </div>
-        {cobertura < 0.99 && (
+        <p className="note tiny">
+          {num(universo.meta.comEmenta)} de {num(universo.meta.disciplinas)} disciplinas com ementa (
+          {pct(universo.meta.comEmenta / Math.max(1, universo.meta.disciplinas))}) — a fase 6a ainda
+          não usa similaridade de ementa; só a equivalência oficial.
+        </p>
+        {(universo.meta.coberturaPrereq < 0.99 || universo.meta.coberturaEquiv < 0.99) && (
           <p className="note tiny">
             A coleta de pré-requisitos/equivalências ainda está rodando. Reexporte o banco quando
             ela terminar: o cálculo fica mais preciso sem mexer no front.

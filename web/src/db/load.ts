@@ -59,11 +59,12 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
   const cursos = q<{
     id: number
     nome: string
+    nome_lista: string | null
     campus: string | null
     modalidade: string | null
     grau: string | null
     classificacao: string | null
-  }>(db, 'SELECT id, nome, campus, modalidade, grau, classificacao FROM curso ORDER BY nome')
+  }>(db, 'SELECT id, nome, nome_lista, campus, modalidade, grau, classificacao FROM curso ORDER BY nome')
 
   const versoes = q<Record<string, unknown>>(
     db,
@@ -119,6 +120,8 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
             (SELECT COUNT(*) FROM disciplina) AS disciplinas,
             (SELECT COUNT(*) FROM disciplina_curriculo WHERE tem_prereq = 1) AS com_prereq,
             (SELECT COUNT(*) FROM disciplina_curriculo WHERE tem_equiv = 1) AS com_equiv,
+            (SELECT COUNT(DISTINCT disciplina_curriculo_id) FROM prereq_bloco) AS prereq_dc,
+            (SELECT COUNT(DISTINCT disciplina_curriculo_id) FROM equivalencia_bloco) AS equiv_dc,
             (SELECT COUNT(*) FROM disciplina WHERE programa_texto IS NOT NULL) AS com_ementa`,
   )[0] ?? {}
 
@@ -233,6 +236,23 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
   }
 
   onProgress?.({ label: 'montando currículos' })
+  // ABI/núcleo comum: mesmo `nome_lista` de um curso bem maior (o ABI é a
+  // entrada, o diploma continua na habilitação). Ex.: Artes Cênicas 960 h vs
+  // Direção/Interpretação 2.756 h; Ciências Biológicas "Núcleo Comum".
+  const chPorLista = new Map<string, number>()
+  for (const c of cursos) {
+    const v = versaoByCurso.get(c.id)
+    if (!v || !c.nome_lista) continue
+    const atual = chPorLista.get(c.nome_lista) ?? 0
+    chPorLista.set(c.nome_lista, Math.max(atual, v.chTotal ?? 0))
+  }
+  const ehNucleoComum = (nome: string, lista: string | null, chTotal: number | null) => {
+    if (/n[uú]cleo comum/i.test(nome)) return true
+    if (!lista || !chTotal) return false
+    const irmao = chPorLista.get(lista) ?? 0
+    return irmao >= chTotal * 2 && chTotal < 2000
+  }
+
   const models: CourseModel[] = []
   for (const c of cursos) {
     const versao = versaoByCurso.get(c.id)
@@ -247,6 +267,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
         modalidade: optStr(c.modalidade),
         grau: optStr(c.grau),
         classificacao: optStr(c.classificacao),
+        nucleoComum: ehNucleoComum(str(c.nome), optStr(c.nome_lista), versao.chTotal),
       },
       versao,
       estruturasDoCurso,
@@ -282,6 +303,8 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
       comPrereq: num(meta.com_prereq),
       comEquiv: num(meta.com_equiv),
       comEmenta: num(meta.com_ementa),
+      coberturaPrereq: num(meta.com_prereq) ? Math.min(1, num(meta.prereq_dc) / num(meta.com_prereq)) : 1,
+      coberturaEquiv: num(meta.com_equiv) ? Math.min(1, num(meta.equiv_dc) / num(meta.com_equiv)) : 1,
     },
   }
 }
@@ -360,6 +383,7 @@ function buildCourse(
         horas: deficit,
         kind: 'atividade',
         candidatos: [],
+        residual: false,
       })
       continue
     }
@@ -370,9 +394,26 @@ function buildCourse(
       horas: deficit,
       kind: temDcg ? 'dcg' : candidatos.length ? 'eletiva' : 'livre',
       candidatos,
+      residual: false,
     })
   }
   quotas.sort((a, b) => b.horas - a.horas)
+
+  // Sobra entre ch_total e o que os núcleos declaram (núcleo flexível sem
+  // ch_minima, ex.: Música/Bacharelado 2.400 h com 1.290 h mapeadas). Sem isso
+  // o curso parecia 1.110 h mais barato do que é.
+  const modelado = fixedHoras + quotas.reduce((s, q) => s + q.horas, 0)
+  const sobra = (versao.chTotal ?? 0) - modelado
+  if (sobra > 60) {
+    quotas.push({
+      estruturaId: -1,
+      descricao: 'Horas do currículo fora dos núcleos mapeados',
+      horas: sobra,
+      kind: 'livre',
+      candidatos: [],
+      residual: true,
+    })
+  }
 
   // CH por semestre: usa o máximo oficial; senão a mediana do que está listado.
   const porPeriodo = new Map<number, number>()

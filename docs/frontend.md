@@ -56,6 +56,14 @@ Pontos que exigiram cuidado:
      nunca como disciplina nem dentro dos semestres.
 4. **`periodo_ideal = 99`** → "qualquer", coluna própria no grafo e no
    planejamento.
+5. **ABI/núcleo comum**: alguns `curso` são só a entrada (Artes Cênicas
+   "Bacharelado" = 960 h; o grau sai em Direção/Interpretação, 2.756 h). A flag
+   `Curso.nucleoComum` (nome "Núcleo Comum" ou CH < 2× o maior irmão de
+   `nome_lista`) os tira do ranking/matriz/run e mostra um aviso quando são o
+   curso-base.
+6. **Núcleo sem `ch_minima`**: se a soma dos núcleos não fecha com
+   `versao.ch_total`, a diferença entra como cota residual ("horas fora dos
+   núcleos mapeados"). Sem isso, Música/Bacharelado parecia 1.110 h mais barata.
 
 ## 3. Cálculo do custo de um curso-alvo
 
@@ -136,10 +144,12 @@ visível.
 
 | limite | impacto | próximo passo |
 |---|---|---|
-| pré-requisitos ~25% das ofertas | plano semestral otimista | nada no front; depende da Fase 3 |
-| **equivalências gravadas sem disciplina** | **métrica subestimada hoje** — ver §8 | corrigir parser e reprocessar o raw |
-| ementas quase vazias | nenhum (ainda não usadas) | Fase 6a + badge na UI |
-| reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | equivalência oficial resolve (quando consertada) |
+| pré-requisitos ~25% das ofertas (100% das que declaram) | plano semestral otimista | nada no front; depende da Fase 3 |
+| equivalências | resolvido em 2026-10-28 (5.003 pares) | manter de olho na reingestão |
+| ementas 79% preenchidas | nenhum (ainda não usadas) | Fase 6a + badge na UI |
+| reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | equivalência oficial já cobre parte |
+| ABI/núcleo comum | ranking mentia (Artes Cênicas 960 h) | marcados e excluídos do ranking (§8.2) |
+| núcleo flexível sem cota | curso parecia mais barato | cota residual contra `ch_total` (§8.3) |
 | oferta de turma/horário não modelada | semestres otimistas | integrar horários (não existe no SIE público) |
 | cota restrita usa só o menu do núcleo | pode subestimar equivalência aprovada caso a caso | revisão humana da Fase 6a |
 | DCG estratégica é uma escolha do aluno | cenário otimista (mas realista se planejado) | interruptor na UI; default ligado |
@@ -149,31 +159,46 @@ explícitos ("a coleta ainda não chegou neste curso"), e o topo mostra a
 porcentagem de ofertas com pré-requisito. Reexportar o banco melhora os números
 sem mexer no código.
 
-## 8. Bug encontrado na coleta (para a frente A)
+## 8. Qualidade de dados: equivalências, ABI e núcleos sem cota
 
-`equivalencia_item` tem 4.862 linhas **todas com `disciplina_req_id` e
-`disciplina_req_codigo` nulos**: o parser lê `item["disciplinaRequisito"]`
-(campo de pré-requisito), mas a API de equivalências devolve a disciplina em
-`item["disciplina"]`. O `data/raw/` já tem o dado (5.007 pares!), então é
-reprocessar — **não precisa de novo crawl**.
+### 8.1 Equivalências (resolvido na coleta)
 
-Impacto medido nos brutos de hoje (partindo de CC):
+O parser de `ufsm_speedrun/relacoes.py` lia `item["disciplinaRequisito"]` (campo
+de pré-requisito) e gravava `equivalencia_item` sem a disciplina de origem. Foi
+corrigido na frente A e o banco reexportado em 2026-10-28: **5.003 pares** com
+id/código (antes: 0). Efeito medido em CC→SI: 3 semestres/1.470 h → **2
+semestres/900 h/62% de reaproveitamento**, exatamente o caso "terminei CC e no
+semestre seguinte fechei SI". O `prereq_*` sempre esteve certo (3.071/3.101).
 
-| curso | obrigatórias | cobertas por equivalência com CC |
-|---|---|---|
-| Sistemas de Informação | 37 | **14** |
-| Engenharia de Computação | 59 | 9 |
-| Engenharia de Produção | — | 6 |
+### 8.2 ABI / núcleo comum
 
-Com isso CC→SI sai de ~1.470 h / 3 semestres (DCG estratégica) para ~900 h /
-2 semestres. O `prereq_*` está correto (99% das ofertas com pré-requisito já têm
-blocos), então a correção é pontual.
+`curso.nome_lista` agrupa o ABI; alguns registros são só a **entrada**:
 
-Patch sugerido em `ufsm_speedrun/relacoes.py` (linha ~52):
+| id | curso | CH | semestres | irmãos |
+|---|---|---|---|---|
+| 837 | Artes Cênicas - Bacharelado | 960 | 3 | Direção/Interpretação Teatral, 2.756 h |
+| 686 | Ciências Biológicas - Núcleo Comum | 1.080 | 3 | Bacharelado 3.535 h / Licenciatura 3.985 h |
 
-```python
-req = item.get("disciplinaRequisito") or item.get("disciplina") or {}
-```
+Sem isso, o ranking dizia que "fechar Artes Cênicas" custava 480 h. Agora
+`Curso.nucleoComum` marca os dois e eles **saem do ranking/matriz/run** (podem
+ser escolhidos como curso de origem, com aviso na UI). Critério: nome contém
+"núcleo comum" ou `ch_total < 2 ×` o maior irmão do mesmo `nome_lista`.
+
+### 8.3 Núcleo flexível sem `ch_minima`
+
+11 cursos tinham mais horas em `ch_total` do que a soma dos núcleos declarados
+— ex.: **Música - Bacharelado (1.001)**: 2.400 h declaradas, 1.290 h mapeadas
+(o nó "DCG" tem 34 ofertas e `ch_minima = NULL`). A diferença agora entra como
+cota residual ("horas do currículo fora dos núcleos mapeados"), preenchida por
+qualquer disciplina. Números: Música 1.110 h, Sociologia EaD 960 h, Artes
+Visuais/Licenciatura 795 h, CC 330 h, Eng. Telecom 390 h.
+
+### 8.4 Ementas e CH nula
+
+8.819 de 11.159 disciplinas com `programa_texto` (79%) — o `.db` foi de 4,6 MB
+para 40,5 MB, ainda tranquilo para o sql.js. Duas disciplinas vêm com
+`ch_total = NULL` (QMC1885, QMC1886) e entram com 0 h; vale um aviso para a
+coleta.
 
 ## 7. Run completo (aba `Todos`)
 

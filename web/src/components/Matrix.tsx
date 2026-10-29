@@ -27,7 +27,7 @@ export function Matrix({ universo, baseId, onPick }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const celula = 6
-  const n = universo.cursos.length
+  const n = dados?.cursos.length ?? universo.cursos.length
 
   useEffect(() => {
     if (dados) return
@@ -73,10 +73,11 @@ export function Matrix({ universo, baseId, onPick }: Props) {
     }
   }, [dados, baseId, hover, n])
 
-  const nomes = universo.cursos.map((c) => c.curso.nome)
+  const nomes = dados ? dados.cursos.map((c) => c.curso.nome) : []
   const idxBusca = (texto: string) => {
+    if (!dados) return -1
     const t = norm(texto)
-    return universo.cursos.findIndex((c) => norm(c.curso.nome).includes(t))
+    return dados.cursos.findIndex((c) => norm(c.curso.nome).includes(t))
   }
 
   return (

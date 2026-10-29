@@ -1,5 +1,5 @@
 import type { CourseModel, Oferta, Universe } from '../db/types'
-import type { Done } from './plan'
+import { prereqSatisfied, type Done } from './plan'
 
 export interface RouteStep {
   ordem: number
@@ -85,18 +85,26 @@ function margem(
   let livre = livreAberto
   const cobertos: Oferta[] = []
   if (livre > 0 && missing.length) {
-    const ordenado = [...missing].sort((a, b) => b.ch - a.ch)
-    const resto: Oferta[] = []
-    for (const o of ordenado) {
-      if (o.ch <= livre) {
-        livre -= o.ch
-        cobertos.push(o)
-      } else {
-        resto.push(o)
+    const disponiveis = new Set(pool)
+    let restantes = [...missing].sort((a, b) => b.ch - a.ch)
+    let cobrou = true
+    while (cobrou && restantes.length && livre > 0) {
+      cobrou = false
+      const sobra: Oferta[] = []
+      for (const o of restantes) {
+        if (o.ch <= livre && prereqSatisfied(target, o.discId, disponiveis)) {
+          livre -= o.ch
+          cobertos.push(o)
+          disponiveis.add(o.discId)
+          cobrou = true
+        } else {
+          sobra.push(o)
+        }
       }
+      restantes = sobra
     }
     missing.length = 0
-    missing.push(...resto)
+    missing.push(...restantes)
   }
 
   let surplus = livre + livreFechado + poolCh - coveredCh
@@ -176,7 +184,9 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   // obrigatórias de outros currículos que entraram como DCG do curso-base
   const dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[] = []
 
-  const restantes = new Set<number>(cursos.map((c) => c.curso.id))
+  const restantes = new Set<number>(
+    cursos.filter((c) => !c.curso.nucleoComum).map((c) => c.curso.id),
+  )
   const porId = new Map(cursos.map((c) => [c.curso.id, c]))
   const passos: RouteStep[] = []
   let horasAcum = 0

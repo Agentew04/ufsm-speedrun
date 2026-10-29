@@ -31,7 +31,7 @@ soltar também funciona). Dá para apontar outro banco com `?db=./caminho.db`.
 
 | aba | o que faz |
 |---|---|
-| **Ranking** | os 148 cursos ordenados por semestres extras, CH extra, cadeiras novas e % de reaproveitamento. Filtros por campus/modalidade. |
+| **Ranking** | os 148 cursos ordenados por semestres extras, CH extra, cadeiras novas e % de reaproveitamento. Filtros por campus/modalidade. Currículos de ABI/núcleo comum (entrada, não diploma) ficam fora. |
 | **Curso** | plano do curso-alvo: o que já vale, o que falta por período, cotas a preencher, timeline semestre a semestre (bin-packing com pré-requisitos) e grafo do currículo. |
 | **Todos** | o run completo: rota gulosa para fechar os 148 cursos, custo marginal de cada passo, curva acumulada e os gargalos que servem mais currículos. |
 | **Rede** | grafo bipartido curso ↔ disciplina mostrando as cadeiras compartilhadas (os "hubs" de reaproveitamento). |

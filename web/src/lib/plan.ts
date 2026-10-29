@@ -33,6 +33,7 @@ export interface QuotaPlan {
   kind: 'eletiva' | 'dcg' | 'livre'
   cobertoPorJaFeito: number
   faltam: number
+  residual: boolean
   sugestoes: { discId: number; codigo: string; nome: string; ch: number }[]
 }
 
@@ -102,9 +103,9 @@ export function makeDone(
       if (q.kind === 'atividade') continue
       const h = Math.round(q.horas * fracao)
       freeHoras += h
-      // só DCG e cota aberta aceitam qualquer disciplina; menu fechado não pode
-      // ser direcionado para a obrigatória de outro curso
-      if (q.kind === 'dcg' || q.kind === 'livre') freeAberto += h
+      // só DCG e cota aberta declaradas aceitam qualquer disciplina; menu
+      // fechado e horas residuais não podem ser direcionados para outro curso
+      if (!q.residual && (q.kind === 'dcg' || q.kind === 'livre')) freeAberto += h
     }
   }
 
@@ -122,6 +123,22 @@ function prereqDiscs(target: CourseModel, discId: number): number[] {
     }
   }
   return [...all]
+}
+
+/**
+ * A disciplina pode ser cursada agora? OR entre blocos, AND dentro do bloco.
+ * Itens de período/CH são tratados como sinal fraco (ignorados).
+ */
+export function prereqSatisfied(target: CourseModel, discId: number, disponiveis: Set<number>): boolean {
+  const blocos = target.prereqs.get(discId)
+  if (!blocos || !blocos.length) return true
+  return blocos.some((bloco) =>
+    bloco.itens.every((it) => {
+      if (it.tipo !== 1 && it.tipo !== 2) return true
+      if (!it.discId) return true
+      return disponiveis.has(it.discId)
+    }),
+  )
 }
 
 export function scoreCourse(
@@ -154,23 +171,32 @@ export function scoreCourse(
   // DCG estratégica: as horas de DCG/cota aberta do curso de origem aceitam
   // qualquer disciplina do catálogo — então podem ter sido gastas justamente
   // nas obrigatórias que faltam aqui ("fiz SI de graça como DCG do CC").
-  // Só vale para horas em aberto (dcg/livre), nunca para menu fechado.
+  // Só vale para horas em aberto (dcg/livre), nunca para menu fechado, e só
+  // cobre disciplina cujos pré-requisitos já estão satisfeitos.
   let livre = estrategica ? Math.min(done.freeAberto, done.freeHoras) : 0
   let livreUsado = 0
   if (livre > 0 && fixedMissing.length) {
-    const ordenado = [...fixedMissing].sort((a, b) => b.ch - a.ch)
-    const resto: Oferta[] = []
-    for (const o of ordenado) {
-      if (o.ch <= livre) {
-        livre -= o.ch
-        livreUsado += o.ch
-        fixedDcg.push(o)
-      } else {
-        resto.push(o)
+    const disponiveis = new Set(done.ids)
+    let restantes = [...fixedMissing].sort((a, b) => b.ch - a.ch)
+    let cobrou = true
+    while (cobrou && restantes.length && livre > 0) {
+      cobrou = false
+      const sobraDestaRodada: Oferta[] = []
+      for (const o of restantes) {
+        if (o.ch <= livre && prereqSatisfied(target, o.discId, disponiveis)) {
+          livre -= o.ch
+          livreUsado += o.ch
+          fixedDcg.push(o)
+          disponiveis.add(o.discId)
+          cobrou = true
+        } else {
+          sobraDestaRodada.push(o)
+        }
       }
+      restantes = sobraDestaRodada
     }
     fixedMissing.length = 0
-    fixedMissing.push(...resto)
+    fixedMissing.push(...restantes)
   }
 
   let surplus = done.freeHoras - livreUsado
@@ -230,6 +256,7 @@ export function scoreCourse(
       kind: q.kind === 'livre' ? 'livre' : q.kind === 'dcg' ? 'dcg' : 'eletiva',
       cobertoPorJaFeito: coberto,
       faltam,
+      residual: q.residual,
       sugestoes,
     })
     freeNeed += faltam
@@ -390,7 +417,7 @@ export function scoreFast(target: CourseModel, done: Done): { semestres: number;
 
 /** Matriz base × alvo com o custo de fechar cada curso partindo de cada curso. */
 export function buildMatrix(universo: Universe): { cursos: CourseModel[]; semestres: number[][] } {
-  const cursos = universo.cursos
+  const cursos = universo.cursos.filter((c) => !c.curso.nucleoComum)
   const semestres: number[][] = []
   for (const base of cursos) {
     const done = makeDone(universo, base, null, new Map(), new Set())

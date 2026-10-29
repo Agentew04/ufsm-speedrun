@@ -111,6 +111,13 @@ export function BasePanel({
             </div>
           </div>
 
+          {base.curso.nucleoComum && (
+            <p className="note tiny">
+              Este é um <b>núcleo comum / ABI</b>: você entra por aqui e o diploma sai na
+              habilitação. O cálculo funciona, mas a CH do curso é só a entrada.
+            </p>
+          )}
+
           <div className="divider" />
 
           <div className="row-between">

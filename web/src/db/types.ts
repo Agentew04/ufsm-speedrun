@@ -8,6 +8,8 @@ export interface Curso {
   modalidade: string | null
   grau: string | null
   classificacao: string | null
+  /** ABI / núcleo comum: não é um curso completo, é a entrada que leva a uma habilitação */
+  nucleoComum: boolean
 }
 
 export interface Versao {
@@ -72,6 +74,8 @@ export interface Quota {
   kind: QuotaKind
   /** disciplinas listadas como opção para essa cota */
   candidatos: number[]
+  /** sobra entre ch_total do currículo e o que os núcleos declaram (núcleo sem cota) */
+  residual: boolean
 }
 
 export interface CourseModel {
@@ -108,5 +112,8 @@ export interface Universe {
     comPrereq: number
     comEquiv: number
     comEmenta: number
+    /** fração das ofertas que declaram relação e já têm blocos coletados */
+    coberturaPrereq: number
+    coberturaEquiv: number
   }
 }

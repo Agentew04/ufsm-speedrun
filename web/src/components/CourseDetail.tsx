@@ -81,7 +81,15 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
             <span className="chip chip-ghost">{plural(target.semestres, 'semestre', 'semestres')}</span>
             <span className="chip chip-ghost">{horas(target.versao.chTotal ?? target.fixedHoras)}</span>
             {outroCampus && <span className="chip chip-warn">campus diferente do seu</span>}
+            {target.curso.nucleoComum && <span className="chip chip-warn">núcleo comum / ABI</span>}
           </div>
+          {target.curso.nucleoComum && (
+            <p className="note tiny">
+              Este currículo é a <b>entrada (ABI/núcleo comum)</b>, não o curso completo: o diploma
+              continua na habilitação (ex.: Direção ou Interpretação Teatral). Ele fica fora do
+              ranking justamente por isso — fechá-lo não te forma em nada.
+            </p>
+          )}
         </div>
       </header>
 
@@ -197,7 +205,10 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                       <div className="quota-foot tiny">
                         {q.kind === 'livre' ? (
                           <span className="dim">
-                            cota aberta: qualquer disciplina do catálogo — faltam {horas(q.faltam)}
+                            {q.residual
+                              ? 'horas do currículo fora dos núcleos mapeados — qualquer disciplina'
+                              : 'cota aberta: qualquer disciplina do catálogo'}{' '}
+                            — faltam {horas(q.faltam)}
                           </span>
                         ) : q.kind === 'dcg' ? (
                           <span className="dim">

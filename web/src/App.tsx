@@ -140,7 +140,9 @@ export default function App() {
 
   const redeData = useMemo(() => {
     if (!universo || !base || !done) return { elements: [], discTotal: 0, discMostrados: 0 }
-    const candidatos = scores.filter((s) => s.target.curso.id !== base.curso.id)
+    const candidatos = scores.filter(
+      (s) => s.target.curso.id !== base.curso.id && !s.target.curso.nucleoComum,
+    )
     const ordenados =
       redeOrdem === 'aproveitamento'
         ? [...candidatos].sort((a, b) => b.overlapPct - a.overlapPct || a.semestres - b.semestres)
@@ -153,7 +155,9 @@ export default function App() {
     return <DbGate onBytes={onBytes} status={status} mensagem={mensagem} />
   }
 
-  const melhores = scores.filter((s) => s.target.curso.id !== baseId).slice(0, 3)
+  const melhores = scores
+    .filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum)
+    .slice(0, 3)
 
   return (
     <div className="app">
@@ -175,8 +179,9 @@ export default function App() {
           <span className="topstat">
             <b>{num(universo.meta.disciplinas)}</b> disciplinas
           </span>
-          <span className={`topstat ${universo.meta.comPrereq / Math.max(1, universo.meta.ofertas) < 0.9 ? 'is-warn' : ''}`}>
-            pré-req <b>{Math.round((universo.meta.comPrereq / Math.max(1, universo.meta.ofertas)) * 100)}%</b>
+          <span className={`topstat ${Math.min(universo.meta.coberturaPrereq, universo.meta.coberturaEquiv) < 0.97 ? 'is-warn' : ''}`}
+            title={`pré-requisitos ${Math.round(universo.meta.coberturaPrereq * 100)}% · equivalências ${Math.round(universo.meta.coberturaEquiv * 100)}% das ofertas com relação já têm blocos`}>
+            dados <b>{Math.round(Math.min(universo.meta.coberturaPrereq, universo.meta.coberturaEquiv) * 100)}%</b>
           </span>
         </div>
 

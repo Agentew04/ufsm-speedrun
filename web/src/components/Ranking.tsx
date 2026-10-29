@@ -36,7 +36,7 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado 
 
   const filtrados = useMemo(() => {
     const termo = norm(busca.trim())
-    let list = scores.filter((s) => s.target.curso.id !== baseId)
+    let list = scores.filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum)
     if (termo) {
       list = list.filter((s) =>
         norm(`${s.target.curso.nome} ${s.target.curso.campus ?? ''} ${s.target.curso.grau ?? ''}`).includes(termo),
@@ -65,7 +65,7 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado 
   }, [scores, baseId, busca, campus, modalidade, ordem, soCurto])
 
   const semBase = useMemo(
-    () => scores.filter((s) => s.target.curso.id !== baseId),
+    () => scores.filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum),
     [scores, baseId],
   )
   const resumo = useMemo(() => distanciaResumo(semBase), [semBase])
@@ -206,6 +206,15 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado 
         </table>
         {filtrados.length === 0 && <div className="combo-empty">nenhum curso com esses filtros</div>}
       </div>
+
+      {scores.some((s) => s.target.curso.nucleoComum) && (
+        <p className="note tiny">
+          {scores.filter((s) => s.target.curso.nucleoComum).length} currículos de{' '}
+          <b>ABI/núcleo comum</b> ficam fora do ranking — eles são a entrada do curso, não o
+          diploma (ex.: "Artes Cênicas - Bacharelado" tem só as 960 h iniciais; o grau sai em
+          Direção ou Interpretação Teatral, 2.756 h).
+        </p>
+      )}
 
       {levers.length > 0 && (
         <div className="panel levers">
