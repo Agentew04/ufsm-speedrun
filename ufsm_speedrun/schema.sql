@@ -174,8 +174,27 @@ CREATE TABLE IF NOT EXISTS disciplina_curriculo (
     nota_maxima    REAL,
     tem_prereq     INTEGER NOT NULL DEFAULT 0,
     tem_equiv      INTEGER NOT NULL DEFAULT 0,
+    -- "Período vencido" (tipo 5): precisa ter vencido este período, logo pode
+    -- cursar a partir de periodo_minimo + 1. Requisitos de CH por estrutura
+    -- ficam na tabela requisito_ch (podem ser vários por oferta).
+    periodo_minimo INTEGER,
     UNIQUE (versao_id, estrutura_id, disciplina_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_dc_periodo ON disciplina_curriculo(periodo_minimo);
+
+-- "Carga horária vencida numa estrutura" (tipo 3). Uma linha por estrutura
+-- exigida; `estrutura_id` NULL significa "GERAL" (total do curso).
+CREATE TABLE IF NOT EXISTS requisito_ch (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    disciplina_curriculo_id INTEGER NOT NULL
+                            REFERENCES disciplina_curriculo(id) ON DELETE CASCADE,
+    estrutura_id           INTEGER REFERENCES estrutura(id),
+    estrutura_texto        TEXT,
+    horas                  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reqch_dc ON requisito_ch(disciplina_curriculo_id);
 
 CREATE INDEX IF NOT EXISTS idx_dc_versao    ON disciplina_curriculo(versao_id);
 CREATE INDEX IF NOT EXISTS idx_dc_estrutura ON disciplina_curriculo(estrutura_id);

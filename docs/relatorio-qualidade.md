@@ -1,6 +1,6 @@
 # Relatório de qualidade dos dados
 
-Gerado em 2026-10-29T00:53:15Z por `python -m ufsm_speedrun validar`.
+Gerado em 2026-10-29T02:09:14Z por `python -m ufsm_speedrun validar`.
 
 | | verificação | situação |
 |---|---|---|
@@ -15,6 +15,7 @@ Gerado em 2026-10-29T00:53:15Z por `python -m ufsm_speedrun validar`.
 | ⚠️ | Cotas abertas (sem disciplinas e sem atividades) | 21 cota(s) — precisam de tratamento explícito no otimizador |
 | ⚠️ | Adjudicação da banda prioritária (Fase 6b) | 943 pares julgados (equivalente: 478, parcial: 323, nao_equivalente: 142) · 76 fora da banda atual (seguem válidos na view) |
 | ✅ | Elegibilidade de DCG | 129 cotas · 15209 pares · 4657 por menu · 1 abertas |
+| ✅ | Requisitos de período e carga horária | 301/301 ofertas com período mínimo · 79/79 exigências de CH |
 
 ## ✅ Integridade referencial
 
@@ -40,8 +41,8 @@ Gerado em 2026-10-29T00:53:15Z por `python -m ufsm_speedrun validar`.
 
 3806 arestas · 4 auto-exigência(s) · 0 ciclo(s) real(is)
 
-- `auto: MSC1272`
 - `auto: MSC1259`
+- `auto: MSC1272`
 - `auto: UFSM00061`
 - `auto: UFSM00923`
 
@@ -82,6 +83,10 @@ Gerado em 2026-10-29T00:53:15Z por `python -m ufsm_speedrun validar`.
 ## ✅ Elegibilidade de DCG
 
 129 cotas · 15209 pares · 4657 por menu · 1 abertas
+
+## ✅ Requisitos de período e carga horária
+
+301/301 ofertas com período mínimo · 79/79 exigências de CH
 
 ---
 

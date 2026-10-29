@@ -115,7 +115,7 @@ O que **não** fazer: UI, agenda interativa, segundo grafo.
 3. **Auditor do guloso** — rede de segurança quando coleta ou equivalência mudar.
 4. **Campus na rota** — só se o produto for usar isso de verdade.
 
-## 4b. Implementado (2026-10-28)
+## 7. Implementado (2026-10-28)
 
 | item | estado |
 |---|---|
@@ -208,13 +208,45 @@ python -m ufsm_speedrun auditar --dcg menu
 Para as ~2 cotas de DCG realmente abertas (SI/2026: 420 h sem lista), aí sim cabe
 uma regra de área — mas como sugestão explícita, nunca como default silencioso.
 
-## 9. Números para calibrar
+## 9. Campus e requisitos de período (P1)
+
+### Campus
+
+`auditar --campus mesmo` filtra os alvos para o campus-base + EaD e restringe as
+disciplinas elegíveis às ofertadas ali. Base CC/Santa Maria:
+
+| política | cursos | disciplinas | horas |
+|---|---|---|---|
+| `livre` (atual do front) | 145 | 5.152 | 311.260 |
+| **`mesmo`** | **125** | **4.237** | **256.040** |
+
+Os 20 cursos restantes ficam em Cachoeira do Sul, Frederico Westphalen, Palmeira
+das Missões ou fora do EaD elegível. `curso.campus` vem do SIE; **2.017
+disciplinas não têm oferta em Santa Maria**.
+
+### Requisitos de período e CH
+
+`python -m ufsm_speedrun requisitos` materializa:
+
+```
+período vencido (tipo 5) .... 301 ofertas  -> periodo_minimo
+CH em estrutura (tipo 3) ....  79 exigências em 62 ofertas -> requisito_ch
+créditos vencidos (tipo 4) ...   0 itens (não existe no banco)
+```
+
+Regra para o cliente: `periodo_minimo = N` significa "só a partir do período N+1";
+`requisito_ch.estrutura_id` nulo significa "GERAL" (total do curso). Detalhes em
+`docs/nota-frontend.md §6`.
+
+## 10. Números para calibrar
 
 ```
 cursos ........................ 148  (2 são ABI/núcleo comum)
 ofertas de disciplina ......... 12.313
 ofertas com relação ........... 6.031
-arestas de pré-requisito ...... 4.649   (1.308 são "período vencido", ignoradas)
+arestas de pré-requisito ...... 4.649   (1.308 período vencido + 79 CH, agora materializados)
 equivalências oficiais ........ 3.862 pares
-equivalências julgadas ........ 233 equivalente · 193 parcial · 36 não
+equivalências julgadas ........ 478 equivalente · 323 parcial · 142 não
+cotas de DCG elegíveis ........ 129 (128 menu + 1 aberta) · 15.209 pares
+disciplinas terminais ......... 594 (TCC/estágio/monografia)
 ```

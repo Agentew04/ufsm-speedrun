@@ -128,6 +128,28 @@ def migrar(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE disciplina ADD COLUMN terminal_categoria TEXT")
         conn.execute("ALTER TABLE disciplina ADD COLUMN terminal_motivo TEXT")
 
+    colunas_dc = {r[1] for r in conn.execute("PRAGMA table_info(disciplina_curriculo)")}
+    if colunas_dc and "periodo_minimo" not in colunas_dc:
+        conn.execute("ALTER TABLE disciplina_curriculo ADD COLUMN periodo_minimo INTEGER")
+    # colunas de uma versão anterior do modelo (foram substituídas por requisito_ch)
+    for antiga in ("ch_minima_estrutura", "estrutura_ref_id", "estrutura_ref_texto"):
+        if antiga in colunas_dc:
+            conn.execute(f"ALTER TABLE disciplina_curriculo DROP COLUMN {antiga}")
+
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS requisito_ch (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            disciplina_curriculo_id INTEGER NOT NULL
+                                    REFERENCES disciplina_curriculo(id) ON DELETE CASCADE,
+            estrutura_id           INTEGER REFERENCES estrutura(id),
+            estrutura_texto        TEXT,
+            horas                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_reqch_dc ON requisito_ch(disciplina_curriculo_id);
+        """
+    )
+
     conn.executescript(VIEW_EQUIVALENCIA)
     conn.commit()
 

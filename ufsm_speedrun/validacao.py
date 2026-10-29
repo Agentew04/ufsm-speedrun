@@ -299,6 +299,39 @@ def checar_dcg(conn: sqlite3.Connection) -> Achado:
     )
 
 
+def checar_requisitos(conn: sqlite3.Connection) -> Achado:
+    """Os tipos 3 e 5 do SIE estão materializados? Se não, a agenda os ignora."""
+    colunas = {r[1] for r in conn.execute("PRAGMA table_info(disciplina_curriculo)")}
+    if "periodo_minimo" not in colunas:
+        return Achado("Requisitos de período e carga horária", "atencao",
+                      "coluna periodo_minimo ausente — rode: requisitos")
+
+    esperado_periodo = _escalar(
+        conn,
+        "SELECT COUNT(DISTINCT pb.disciplina_curriculo_id) FROM prereq_item pi "
+        "JOIN prereq_bloco pb ON pb.id = pi.bloco_id WHERE pi.tipo_item = 5",
+    )
+    tem_periodo = _escalar(
+        conn, "SELECT COUNT(*) FROM disciplina_curriculo WHERE periodo_minimo IS NOT NULL"
+    )
+    esperado_ch = _escalar(
+        conn, "SELECT COUNT(*) FROM prereq_item WHERE tipo_item = 3"
+    )
+    try:
+        tem_ch = _escalar(conn, "SELECT COUNT(*) FROM requisito_ch")
+    except sqlite3.OperationalError:
+        tem_ch = 0
+
+    faltando = (esperado_periodo - tem_periodo) + (esperado_ch - tem_ch)
+    return Achado(
+        "Requisitos de período e carga horária",
+        "ok" if faltando <= 0 else "atencao",
+        f"{tem_periodo}/{esperado_periodo} ofertas com período mínimo · "
+        f"{tem_ch}/{esperado_ch} exigências de CH" +
+        ("" if faltando <= 0 else f" · {faltando} não materializada(s) — rode: requisitos"),
+    )
+
+
 # --------------------------------------------------------------------- relatório
 def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
     destino = destino or (config.PROJECT_ROOT / "docs" / "relatorio-qualidade.md")
@@ -311,6 +344,7 @@ def gerar(conn: sqlite3.Connection, destino: Path | None = None) -> Path:
         checar_buckets(conn),
         checar_julgamento(conn),
         checar_dcg(conn),
+        checar_requisitos(conn),
     ]
 
     icone = {"ok": "✅", "atencao": "⚠️", "problema": "❌"}

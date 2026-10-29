@@ -15,7 +15,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import (auditor, config, curriculos, db, dcg, discover, ementas, endpoints,
-               equivalencia, julgamento, publicacao, relacoes, validacao)
+               equivalencia, julgamento, publicacao, relacoes, requisitos, validacao)
 from .classificacao import classificar as classificar_cursos
 from .http import UfsmClient
 
@@ -318,6 +318,19 @@ def cmd_classificar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_requisitos(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        requisitos.aplicar(conn)
+        requisitos.relatorio(conn)
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_dcg(args: argparse.Namespace) -> int:
     if not Path(config.DB_PATH).exists():
         print(f"banco não existe em {config.DB_PATH} — rode: init-db")
@@ -340,7 +353,8 @@ def cmd_auditar(args: argparse.Namespace) -> int:
         if args.front:
             return auditor.comparar(conn, Path(args.front))
         resultado = auditor.run(conn, base_id=args.base,
-                                com_julgadas=not args.sem_julgadas, dcg=args.dcg)
+                                com_julgadas=not args.sem_julgadas,
+                                dcg=args.dcg, campus=args.campus)
         print(f"\n  top 10 mais baratos de fechar a partir de {resultado['base'].nome}:")
         ranking = conn.execute(
             """
@@ -503,6 +517,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("classificar", help="marca cursos ABI/núcleo comum no banco")
     p.set_defaults(func=cmd_classificar)
 
+    p = sub.add_parser("requisitos", help="materializa pré-requisitos de período e carga horária")
+    p.set_defaults(func=cmd_requisitos)
+
     p = sub.add_parser("dcg", help="materializa quais disciplinas podem preencher cada cota de DCG")
     p.set_defaults(func=cmd_dcg)
 
@@ -511,8 +528,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sem-julgadas", action="store_true",
                    help="usar só as equivalências oficiais (padrão: oficial + julgadas)")
     p.add_argument("--dcg", choices=("aberta", "menu"), default="aberta",
-                   help="'aberta' = DCG aceita qualquer disciplina (comportamento atual do front); "
-                        "'menu' = DCG com lista só aceita o que está na lista")
+                   help="'aberta' = DCG aceita qualquer disciplina; 'menu' = só o que está no menu")
+    p.add_argument("--campus", choices=("livre", "mesmo"), default="livre",
+                   help="'livre' = qualquer campus; 'mesmo' = base + EaD, e só disciplinas do campus-base")
     p.add_argument("--front", default=None,
                    help="JSON exportado pelo front para comparar as duas implementações")
     p.set_defaults(func=cmd_auditar)

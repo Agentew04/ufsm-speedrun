@@ -97,7 +97,6 @@ O `passos` é o objeto de `buildSpeedrun`; o `benchmark` é o resultado de
 `scoreCourse` para cada alvo. Um botão "exportar diagnóstico" no modo dev resolve.
 
 ## 5. DCG: menu fechado e disciplinas terminais
-
 O modelo atual trata toda cota de DCG como "qualquer disciplina". Os dados dizem
 que isso é exceção: **129 cotas, 128 com menu listado, 1 aberta** (SI/2026, 420 h).
 
@@ -127,7 +126,51 @@ Impacto medido no auditor: rota **4.991 → 5.152 disciplinas**, 301.480 → 311
 
 Se for implementar só uma coisa desta lista, é essa.
 
-## 6. Artefatos publicados: três bancos, três momentos
+## 6. Requisitos de período e de carga horária
+
+O SIE registra dois tipos de condição que o plano semestral ignorava:
+
+| tipo | o que exige | onde está agora |
+|---|---|---|
+| 5 — período vencido | ter vencido o período N | `disciplina_curriculo.periodo_minimo = N` |
+| 3 — CH numa estrutura | ter H horas na estrutura X | tabela `requisito_ch` |
+
+Rodar `python -m ufsm_speedrun requisitos` materializa os dois.
+
+### Período vencido (o mais comum: 301 ofertas)
+
+```sql
+SELECT periodo_minimo FROM disciplina_curriculo WHERE id = ?;
+-- se N não for nulo, a disciplina só pode entrar a partir do período N+1
+```
+
+No `earliest()` de `plan.ts`, é um `max` a mais:
+
+```ts
+const pm = Number(row.periodo_minimo ?? 0)
+if (pm > 0) resultado = Math.max(resultado, pm + 1)
+```
+
+### Carga horária em estrutura (62 ofertas)
+
+Uma linha por estrutura exigida. **`estrutura_id` nulo significa "GERAL"** —
+total do curso, que aceita somatório de qualquer estrutura:
+
+```sql
+SELECT estrutura_id, horas FROM requisito_ch WHERE disciplina_curriculo_id = ?;
+```
+
+Regra: para cada linha, a CH cumprida **naquela estrutura** precisa ser ≥ `horas`;
+quando `estrutura_id` é nulo, vale a CH total do curso.
+
+### Créditos vencidos (tipo 4)
+
+Zero ocorrências no banco — não precisa implementar. Se aparecer, é dado novo.
+
+> Impacto: sem isso, a agenda colocava disciplina no 1º semestre que exige ter
+> vencido o 5º. Não muda o custo total, mas muda a ordem — e a ordem é o produto.
+
+## 7. Artefatos publicados: três bancos, três momentos
 
 `python -m ufsm_speedrun publicar` gera em `data/public/`. Cada arquivo existe
 porque corresponde a uma affordance diferente da UI — nada baixa antes da hora.
@@ -192,7 +235,7 @@ Dá para fatiar `bibliografias.db` por prefixo de código (`bib-ELC.db.gz`,
 O build sabe o prefixo, então é barato de fazer depois — mas multiplica arquivos
 e caches. Hoje não vale; só se o uso mostrar que muita gente expande bibliografia.
 
-## 7. Um detalhe de modelagem para vocês decidirem
+## 8. Um detalhe de modelagem para vocês decidirem
 `makeDone` + `scoreCourse` permitem que horas abertas do curso-base cubram
 **qualquer** obrigatória do alvo (DCG estratégica). A regra é generosa — pela
 contagem, `Música - Bacharelado` sai a 810 h de Ciência da Computação.

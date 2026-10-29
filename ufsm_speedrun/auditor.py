@@ -69,6 +69,7 @@ class Quota:
 class Curso:
     id: int
     nome: str
+    campus: str | None
     nucleo_comum: bool
     ch_total: int
     ch_max_periodo: int
@@ -97,7 +98,7 @@ class Done:
 
 # ----------------------------------------------------------------- carregar
 def carregar(conn: sqlite3.Connection, *, com_julgadas: bool = True,
-             dcg: str = "aberta"):
+             dcg: str = "aberta", campus_base: str | None = None):
     disc_ch = {
         r[0]: r[1] or 0
         for r in conn.execute("SELECT id, ch_total FROM disciplina")
@@ -115,13 +116,27 @@ def carregar(conn: sqlite3.Connection, *, com_julgadas: bool = True,
 
     cursos_raw = conn.execute(
         """
-        SELECT c.id, c.nome, c.eh_nucleo_comum, v.id AS versao_id, v.ch_total,
+        SELECT c.id, c.nome, c.eh_nucleo_comum, c.campus, v.id AS versao_id, v.ch_total,
                v.ch_max_periodo, v.periodo_ideal
         FROM curso c
         JOIN versao_curriculo v ON v.curso_id = c.id AND v.selecionada = 1
         ORDER BY c.nome
         """
     ).fetchall()
+
+    # onde cada disciplina é ofertada (proxy: campi dos cursos que a listam)
+    disc_campus: dict[int, set[str]] = {}
+    for disc_id, campus in conn.execute(
+        """
+        SELECT dc.disciplina_id, c.campus
+        FROM disciplina_curriculo dc
+        JOIN versao_curriculo v ON v.id = dc.versao_id
+        JOIN curso c ON c.id = v.curso_id
+        WHERE v.selecionada = 1
+        """
+    ):
+        if campus:
+            disc_campus.setdefault(disc_id, set()).add(campus)
 
     # pré-requisitos por oferta
     prereq_raw = conn.execute(
@@ -160,7 +175,7 @@ def carregar(conn: sqlite3.Connection, *, com_julgadas: bool = True,
 
     cursos: list[Curso] = []
     for row in cursos_raw:
-        curso_id, nome, nucleo, versao_id, ch_total, ch_max, periodo_ideal = row
+        curso_id, nome, nucleo, campus, versao_id, ch_total, ch_max, periodo_ideal = row
 
         estruturas = [
             Estrutura(id=r[0], pai_id=r[1], descricao=r[2] or "", ch_minima=r[3] or 0)
@@ -186,17 +201,27 @@ def carregar(conn: sqlite3.Connection, *, com_julgadas: bool = True,
         ]
         cursos.append(
             _montar_curso(
-                curso_id, nome, bool(nucleo), ch_total or 0, ch_max or 0,
+                curso_id, nome, campus, bool(nucleo), ch_total or 0, ch_max or 0,
                 periodo_ideal or 0, estruturas, ofertas,
                 prereq_por_dc, equiv_por_disc, elegiveis, dcg,
             )
         )
 
-    return cursos, disc_ch, terminais
+    # disciplinas cursáveis a partir do campus-base (EaD vale em qualquer lugar)
+    if campus_base:
+        disponiveis = {
+            disc_id for disc_id, campi in disc_campus.items()
+            if campus_base in campi or "EaD" in campi
+        }
+    else:
+        disponiveis = set(disc_campus)
+
+    return cursos, disc_ch, terminais, disponiveis
 
 
 def _montar_curso(
-    curso_id: int, nome: str, nucleo_comum: bool, ch_total: int, ch_max_periodo: int,
+    curso_id: int, nome: str, campus: str | None, nucleo_comum: bool,
+    ch_total: int, ch_max_periodo: int,
     periodo_ideal: int, estruturas: list[Estrutura], ofertas: list[Oferta],
     prereq_por_dc: dict[int, list[list[tuple[int, int | None]]]],
     equiv_por_disc: dict[int, list[int]],
@@ -287,7 +312,8 @@ def _montar_curso(
             equivals[o.disc_id] = equiv_por_disc[o.disc_id]
 
     return Curso(
-        id=curso_id, nome=nome, nucleo_comum=nucleo_comum, ch_total=ch_total,
+        id=curso_id, nome=nome, campus=campus, nucleo_comum=nucleo_comum,
+        ch_total=ch_total,
         ch_max_periodo=ch_max_periodo, periodo_ideal=periodo_ideal,
         estruturas=estruturas, ofertas=ofertas, fixed=fixed, fixed_ids=fixed_ids,
         fixed_horas=fixed_horas, quotas=quotas,
@@ -342,7 +368,8 @@ def _prereq_ok(curso: Curso, disc_id: int, disponiveis: set[int]) -> bool:
 
 
 def score(curso: Curso, done: Done, dcg: str = "aberta",
-          terminais: set[int] | None = None) -> dict:
+          terminais: set[int] | None = None,
+          disponiveis: set[int] | None = None) -> dict:
     """Port de scoreCourse (web/src/lib/plan.ts:143) sem agenda."""
     terminais = terminais or set()
     cobertas_por_equiv: set[int] = set()
@@ -400,6 +427,8 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
             for cand in q.candidatos:
                 if coberto >= q.horas:
                     break
+                if disponiveis is not None and cand not in disponiveis:
+                    continue
                 if cand not in done.ids:
                     continue
                 ch = done.ch_of.get(cand, 0)
@@ -424,7 +453,9 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
 
 # ------------------------------------------------------------------ guloso
 def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
-                   dcg: str = "aberta", terminais: set[int] | None = None) -> dict:
+                   dcg: str = "aberta", terminais: set[int] | None = None,
+                   disponiveis: set[int] | None = None,
+                   mesmo_campus: bool = False) -> dict:
     """Port de buildSpeedrun (web/src/lib/speedrun.ts:155)."""
     terminais = terminais or set()
     pool = set(done.ids)
@@ -438,6 +469,8 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
             cursos_de[o.disc_id] = cursos_de.get(o.disc_id, 0) + 1
 
     alvos = [c for c in cursos if not c.nucleo_comum and c.id != base.id]
+    if mesmo_campus:
+        alvos = [c for c in alvos if c.campus in (base.campus, "EaD")]
     restantes = {c.id: c for c in alvos}
     passos = []
     horas_acum = 0
@@ -446,7 +479,7 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
         melhor_id, melhor, melhor_chave = None, None, float("inf")
         for cid, target in restantes.items():
             m = _margem(target, pool, pool_ch, livre_aberto, livre_fechado, cursos_de,
-                        dcg, terminais)
+                        dcg, terminais, disponiveis)
             chave = m["horas"] + len(m["missing"]) * 1e-3 + cid * 1e-9
             if chave < melhor_chave:
                 melhor_chave, melhor, melhor_id = chave, m, cid
@@ -486,7 +519,8 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
 
 def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
             livre_fechado: int, cursos_de: dict[int, int],
-            dcg: str = "aberta", terminais: set[int] | None = None) -> dict:
+            dcg: str = "aberta", terminais: set[int] | None = None,
+            disponiveis: set[int] | None = None) -> dict:
     """Port de margem (web/src/lib/speedrun.ts:59)."""
     terminais = terminais or set()
     covered_ch = 0
@@ -541,7 +575,8 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
             continue
         if kind == "eletiva" and q.candidatos:
             cands = sorted(
-                (c for c in q.candidatos if c not in pool),
+                (c for c in q.candidatos
+                 if c not in pool and (disponiveis is None or c in disponiveis)),
                 key=lambda c: -cursos_de.get(c, 0),
             )
             for cand in cands:
@@ -563,11 +598,11 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
 # --------------------------------------------------------------- benchmark
 def run(conn: sqlite3.Connection, base_id: int | None = None,
         com_julgadas: bool = True, exportar: bool = True,
-        dcg: str = "aberta") -> dict:
+        dcg: str = "aberta", campus: str = "livre") -> dict:
     from . import db as _db
 
     _db.migrar(conn)
-    cursos, _, terminais = carregar(conn, com_julgadas=com_julgadas, dcg=dcg)
+    cursos, _, terminais, _ = carregar(conn, com_julgadas=com_julgadas, dcg=dcg)
     por_id = {c.id: c for c in cursos}
 
     base = por_id.get(base_id) if base_id else next(
@@ -576,10 +611,19 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     if base is None:
         raise RuntimeError("curso-base não encontrado")
 
+    disponiveis: set[int] | None = None
+    if campus == "mesmo":
+        cursos, _, terminais, disponiveis = carregar(
+            conn, com_julgadas=com_julgadas, dcg=dcg, campus_base=base.campus
+        )
+        por_id = {c.id: c for c in cursos}
+        base = por_id[base.id]
+
     print(f"  cursos carregados ........ {len(cursos)}")
-    print(f"  base ..................... {base.nome} ({base.ch_total} h)")
+    print(f"  base ..................... {base.nome} ({base.campus}, {base.ch_total} h)")
     print(f"  equivalências ............. {'oficial + julgada' if com_julgadas else 'só oficial'}")
     print(f"  política de DCG ........... {dcg}")
+    print(f"  política de campus ........ {campus}")
 
     done = make_done(base, dcg=dcg)
     print(f"  disciplinas concluídas ... {len(done.ids)}")
@@ -591,12 +635,18 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     print("\n  calculando benchmark base × alvo…", flush=True)
     conn.execute("DELETE FROM rota_benchmark WHERE base_curso_id = ?", (base.id,))
     linhas = []
+    ignorados = 0
     for alvo in cursos:
         if alvo.id == base.id:
             continue
-        s = score(alvo, done, dcg=dcg, terminais=terminais)
+        if campus == "mesmo" and alvo.campus not in (base.campus, "EaD"):
+            ignorados += 1
+            continue
+        s = score(alvo, done, dcg=dcg, terminais=terminais, disponiveis=disponiveis)
         linhas.append((base.id, alvo.id, s["extra_horas"], s["extra_disciplinas"],
                        s["semestres"], agora))
+    if ignorados:
+        print(f"  {ignorados} cursos fora do campus-base ignorados", flush=True)
     conn.executemany(
         "INSERT INTO rota_benchmark (base_curso_id, alvo_curso_id, horas, disciplinas, "
         "semestres, calculado_em) VALUES (?, ?, ?, ?, ?, ?)",
@@ -604,7 +654,8 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
     )
 
     print("  rodando o guloso…", flush=True)
-    rota = build_speedrun(cursos, base, done, dcg=dcg, terminais=terminais)
+    rota = build_speedrun(cursos, base, done, dcg=dcg, terminais=terminais,
+                          disponiveis=disponiveis, mesmo_campus=(campus == "mesmo"))
     conn.execute("DELETE FROM rota_gulosa")
     conn.executemany(
         "INSERT INTO rota_gulosa (ordem, curso_id, horas_passo, horas_acum, semestre, "
@@ -626,6 +677,7 @@ def run(conn: sqlite3.Connection, base_id: int | None = None,
             "base": base.nome,
             "com_julgadas": com_julgadas,
             "dcg": dcg,
+            "campus": campus,
             "carga_semestre": base.carga_semestre,
             "total_disc": rota["total_disc"],
             "total_horas": rota["total_horas"],

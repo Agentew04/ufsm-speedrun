@@ -33,20 +33,35 @@ e nada mais.
 
 ## P1 — correção de modelo
 
-### Campus na rota
-**Por quê:** 30 cursos ficam fora de Santa Maria (11 EaD, 7 FW, 7 Palmeira,
-6 Cachoeira). Hoje o otimizador trata tudo como uma cidade só e pode sugerir
-aula em Cachoeira do Sul e outra em Santa Maria no mesmo semestre.
-**Esforço:** médio. `curso.campus` já existe; falta decidir a política
-(`mesmo_campus` × `livre`) e aplicar no grafo.
-**Risco se não fizer:** a rota é fisicamente impossível para 20% dos cursos.
+### ✅ Campus na rota
 
-### Pré-requisitos tipos 3/4/5
-**Por quê:** 1.308 itens de "período vencido" e 79 de "CH vencida" são
-descartados pelo `plan.ts` (decisão consciente, documentada como "sinal fraco").
-A agenda pode colocar uma disciplina antes do período exigido.
-**Esforço:** médio. Os dados já estão em `prereq_item.numero_referencia`.
-**Risco:** agenda otimista demais em cursos com sequência rígida (música, artes).
+**Problema:** 30 cursos ficam fora de Santa Maria (11 EaD, 7 FW, 7 Palmeira,
+6 Cachoeira) e o otimizador tratava tudo como uma cidade só.
+
+**Solução:** `auditar --campus mesmo` filtra os alvos para o campus-base + EaD e
+restringe as disciplinas elegíveis às ofertadas ali. Materializado em memória a
+partir de `curso.campus` × `disciplina_curriculo` (8.259 disciplinas mapeadas;
+2.017 não têm oferta em Santa Maria).
+
+**Impacto:** base CC/Santa Maria, rota cai de **145 → 125 cursos** e de
+**5.152 → 4.237 disciplinas** (311.260 → 256.040 h). Os 20 cursos fora do campus
+saem do escopo — é o comportamento correto: ninguém cursa Cachoeira do Sul
+morando em Santa Maria.
+
+**Falta:** o front precisa aplicar a mesma política (`--campus mesmo` é o default
+recomendado; hoje ele mostra todos).
+
+### ✅ Pré-requisitos tipos 3/4/5
+
+**Problema:** 1.308 itens de "período vencido" e 79 de "carga horária numa
+estrutura" eram ignorados — a agenda podia colocar no 1º semestre disciplina que
+exige ter vencido o 5º.
+
+**Solução:** `python -m ufsm_speedrun requisitos` materializa:
+- `disciplina_curriculo.periodo_minimo = N` (301 ofertas) → cursar a partir de N+1
+- tabela `requisito_ch` (79 exigências em 62 ofertas), com `estrutura_id` nulo
+  significando "GERAL" (total do curso)
+- tipo 4 (créditos) tem **zero** ocorrências no banco — não precisa implementar
 
 ### Decisão sobre a DCG estratégica
 **Por quê:** horas de cota aberta do curso-base podem cobrir qualquer obrigatória
