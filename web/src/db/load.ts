@@ -296,7 +296,12 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     const item: EquivItem = {
       discId: sub,
       codigo: discById.get(sub)?.codigo ?? null,
-      origem: str(e.origem) === 'julgada' ? 'julgada' : 'oficial',
+      origem:
+        str(e.origem) === 'heuristica'
+          ? 'heuristica'
+          : str(e.origem) === 'julgada'
+            ? 'julgada'
+            : 'oficial',
       confianca: Number(e.confianca ?? 1) || 1,
       veredito: str(e.veredito) === 'parcial' ? 'parcial' : 'equivalente',
     }

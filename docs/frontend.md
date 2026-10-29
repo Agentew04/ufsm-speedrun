@@ -109,22 +109,25 @@ mais cedo possível considerando:
 Disciplinas reais entram primeiro; as eletivas sintéticas ("a escolher") preenchem
 as sobras. Ciclos de pré-requisito caem num bloco final em vez de travar.
 
-**DCG:** menu fechado (128 das 129 cotas) — `dcg_elegivel` diz o que pode
-preencher cada cota, já sem as disciplinas terminais. Uma cota com menu **não é
-hora livre**: só preenche a própria cota. A cota aberta (ex.: SI/2026) aceita
-qualquer disciplina não-terminal, e só ela pode ser "estratégica":
+**DCG é escolha estratégica.** A cota com menu não é hora livre: ela é um
+conjunto de **escolhas** que o plano faz para dispensar obrigatórias do alvo.
+Para cada obrigatória que falta (da maior CH para a menor), procura no menu do
+curso-base uma disciplina que seja a própria obrigatória **ou uma equivalente
+(oficial/julgada/heurística)**; escolhe a mais barata que cabe no orçamento e
+consome essas horas. A escolha entra em `fixedMenu` (badge "via ELC1070").
 
 ```
-livre = horas de DCG em cota ABERTA do curso-base
-para cada obrigatória do alvo que falta, da maior CH para a menor:
-    se não é terminal, cabe em livre e os pré-requisitos estão satisfeitos:
-        conta como cumprida (badge DCG) e livre -= CH
-o resto de livre + as disciplinas do aluno fora do alvo formam o pool das cotas
+orcamento = Σ horas das cotas de DCG com menu do curso-base
+para cada obrigatória que falta, por CH desc:
+    substitutos = { a própria } ∪ equivalências do alvo
+    escolha = menu ∩ substitutos com CH <= orcamento, a mais barata
+    se existe: orcamento -= CH(escolha); conta como cumprida
+surplus -= horas gastas no menu
 ```
 
-Menu fechado (`dcg` com lista) e `eletiva` de núcleo **não** entram nessa conta:
-só vale a lista. Como o CC tem DCG em menu, ele não tem horas estratégicas — a
-UI mostra "menu fechado de 57 disciplinas" em vez do interruptor.
+A cota aberta (1 das 129) continua aceitando qualquer disciplina não-terminal e
+cobre a própria obrigatória (badge "DCG"). TCC/estágio/monografia nunca entram
+em nenhuma das duas. O interruptor "DCG estratégica" liga/desliga tudo.
 
 O bin-packing usa a CH máxima oficial como teto — por isso um curso de 58
 cadeiras pode fechar em ~6 semestres. É uma estimativa otimista e explícita:
@@ -143,10 +146,19 @@ Usada em dois lugares:
 2. **Grafo**: aresta tracejada quando as duas disciplinas estão no mesmo
    currículo.
 
-A equivalência heurística por ementa (≥ 75%) **não** entra no cálculo — só a
-oficial. Quando a Fase 4 terminar, o caminho natural é a Fase 6a gravar
-`similaridade_ementa` e a UI passar a marcar `via = heuristica` com veredito
-visível.
+A view `v_equivalencia_efetiva` é a fonte: **oficial + julgada + heurística**
+(`similaridade_ementa.veredito = 'equivalente'`, origem `heuristica`,
+confiança = `score_final`). A UI marca:
+
+| origem | selo |
+|---|---|
+| `oficial` / `julgada` | `equiv` / `julgada` |
+| `heuristica` | `sugestão` (tooltip com a confiança) |
+| veredito `parcial` | `~equiv` |
+
+Heurística é palpite de texto, não decisão de colegiado — por isso o selo
+diferente e a nota no painel. Usada em dois lugares: cobertura de obrigatórias
+(inclusive nas escolhas de DCG) e aresta tracejada no grafo.
 
 ## 5. UI
 
@@ -172,7 +184,7 @@ visível.
 | reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | equivalência oficial já cobre parte |
 | ABI/núcleo comum | ranking mentia (Artes Cênicas 960 h) | marcados e excluídos do ranking (§8.2) |
 | núcleo flexível sem cota | curso parecia mais barato | cota residual contra `ch_total` (§8.3) |
-| DCG tratada como "qualquer disciplina" | TCC/música contavam em qualquer curso | menu `dcg_elegivel` + terminais (§8.5) |
+| DCG tratada como "qualquer disciplina" | TCC/música contavam em qualquer curso | menu `dcg_elegivel` + terminais + escolha estratégica (§8.5) |
 | oferta de turma/horário não modelada | semestres otimistas | integrar horários (não existe no SIE público) |
 | cota restrita usa só o menu do núcleo | pode subestimar equivalência aprovada caso a caso | revisão humana da Fase 6a |
 
@@ -268,15 +280,17 @@ entram — nem no menu, nem como cobertura por cota.
 
 No front:
 
-- cota de DCG com menu só é preenchida por disciplina **do menu** (o excedente do
-  pool não serve);
-- cota de DCG com menu **não é hora livre**: não cobre obrigatória de outro
-  curso. Só a cota aberta pode (com pré-requisito satisfeito e sem terminal);
+- cota de DCG com menu: as disciplinas do menu são **escolhas**; uma escolha
+  cobre uma obrigatória do alvo se for a própria ou uma equivalente. Consome o
+  orçamento de horas e vira `fixedMenu` (badge `via ELC1070`);
+- cota aberta: cobre a obrigatória diretamente (badge `DCG`), com pré-requisito
+  satisfeito e sem terminal;
 - TCC/estágio do curso-alvo **nunca** é coberto por DCG.
 
-Efeito: CC→SI volta de 2 para **3 semestres / 1.320 h** (só 1 obrigatória do SI
-está no menu de 57 do CC), e o run vai para 5.117 cadeiras / 312.610 h. O
-"TCC de SI como DCG de CC" deixa de existir.
+Efeito: CC→SI fica em **1 semestre / 8 cadeiras / 540 h / 77%** (29 de 37
+obrigatórias cobertas — 8 delas por escolhas do menu: `CAD1002→CAD1137`,
+`ELC1070→UFSM01299`, …). O "TCC de SI como DCG de CC" continua inexistente.
+No run, as escolhas são consumidas uma vez (estado mutável entre passos).
 
 ## 9. Auditoria cruzada (frente A × frente B)
 
@@ -292,30 +306,32 @@ python -m ufsm_speedrun auditar                 # referência
 python -m ufsm_speedrun auditar --front front-diag-701.json
 ```
 
-Resultado em 2026-10-28 (base CC, 146 alvos, `--dcg menu`):
+Resultado em 2026-10-29 (base CC, 146 alvos, `--dcg menu`, com heurística):
 
 | | python | front |
 |---|---|---|
 | benchmark (custo por alvo) | — | **0 divergências em 146** |
-| rota | 145 cursos · 5.152 disc · 311.260 h | 5.117 disc · 312.610 h |
-| passos com curso diferente | 88 de 145 | |
+| rota | 145 cursos · 4.509 disc · 273.405 h | 145 cursos · 283.200 h |
+| passos com curso diferente | 138 de 145 | |
 
-O **modelo é idêntico**: o custo de fechar cada um dos 146 cursos bate exatamente
-(hora e disciplina). O que diverge é a *ordem* da gulosa: já no passo 1 o
-auditor escolhe Música (1.290 h) enquanto o front escolhe SI (1.260 h) — e o
-próprio benchmark do auditor diz que SI custa 1.260 h. Diferença de ~0,4% no
-total, por escolhas de cota que dependem da ordem.
+O **modelo por alvo é idêntico** (hora e disciplina). A rota gulosa diverge porque
+o menu de DCG é estado mutável: o front consome o orçamento **uma vez** e retira
+as horas do menu do "excedente" (`livreFechado`) quando a escolha é feita; o
+auditor também consome o orçamento, mas mantém `livre_fechado` constante e
+credita a disciplina escolhida ao pool — as duas disponibilidades somam e a rota
+dele fica ~3,6% mais barata. Não muda o custo de nenhum alvo isolado; muda a
+ordem e o total do run.
 
-Outras diferenças conhecidas de definição:
+Diferenças de definição (já conhecidas):
 
 - **`semestres`**: o auditor usa o piso `ceil(CH/carga)`; o front usa o plano
-  real (pré-requisitos + teto de CH). O JSON exporta os dois
-  (`semestres` e `semestres_plano`).
+  real (pré-requisitos + período mínimo + CH por estrutura + teto). O JSON
+  exporta os dois (`semestres` e `semestres_plano`).
 - O front reenumera os passos depois de tirar o curso-base (o auditor não o
-  inclui); antes disso o deslocamento de 1 gerava 120 falsas divergências.
+  inclui).
 
-Para o auditor: vale investigar por que `_margem(1250)` no passo 1 é maior que
-`score(1250)` (1.260 h) — é o que faz a primeira escolha divergir.
+Para o auditor: vale alinhar o consumo do menu no guloso (uma única contabilidade
+entre `menu_horas` e `livre_fechado`) — é o que explica o resto da diferença.
 
 
 ## 10. Artefatos publicados (Fase 6d)

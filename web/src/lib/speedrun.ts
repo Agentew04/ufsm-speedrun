@@ -31,6 +31,8 @@ export interface Speedrun {
   gargalos: Gargalo[]
   /** obrigatórias de outros currículos que entraram como DCG do curso-base */
   dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[]
+  /** escolhas do menu de DCG usadas na rota (dispensaram obrigatórias) */
+  dcgEscolhas: { discId: number; codigo: string; nome: string; ch: number }[]
   unicas: number
   compartilhadas: number
   /** custo concentrado: quantos passos concentram 50% das horas */
@@ -45,7 +47,12 @@ interface Margem {
   picks: number[]
   /** obrigatórias cobertas pelas horas livres (DCG) do curso-base */
   cobertos: Oferta[]
+  /** obrigatórias dispensadas por escolhas do menu de DCG (não foram cursadas) */
+  cobertosMenu: Oferta[]
   livreUsado: number
+  /** disciplinas do menu de DCG usadas neste passo */
+  menuUsado: number[]
+  gastoMenu: number
 }
 
 function chDe(universo: Universe, id: number): number {
@@ -65,6 +72,8 @@ function margem(
   livreFechado: number,
   done: Done,
   cursosDe: (id: number) => number,
+  menu: Map<number, number>,
+  menuHoras: number,
 ): Margem {
   let coveredCh = 0
   const missing: Oferta[] = []
@@ -93,7 +102,7 @@ function margem(
       cobrou = false
       const sobra: Oferta[] = []
       for (const o of restantes) {
-        const elegivel = !done.terminais.has(o.discId) && (done.dcgAberta || done.dcgElegiveis.has(o.discId))
+        const elegivel = !done.terminais.has(o.discId) && done.dcgAberta
         if (o.ch <= livre && elegivel && prereqSatisfied(target, o.discId, disponiveis)) {
           livre -= o.ch
           cobertos.push(o)
@@ -112,6 +121,44 @@ function margem(
   let surplus = livre + livreFechado + poolCh - coveredCh
   let horas = 0
   const picks = new Set<number>()
+
+  // menu de DCG do curso-base: "cursar" itens que dispensam obrigatórias do
+  // alvo (a própria disciplina ou uma equivalente), consumindo o orçamento.
+  const menuUsado: number[] = []
+  const cobertosMenu: Oferta[] = []
+  let gastoMenu = 0
+  let orcamentoMenu = menuHoras
+  if (orcamentoMenu > 0 && missing.length) {
+    const sobraMenu: Oferta[] = []
+    for (const o of [...missing].sort((a, b) => b.ch - a.ch)) {
+      const substitutos = new Set<number>([o.discId])
+      for (const eq of target.equivals.get(o.discId) ?? []) {
+        if (eq.discId !== null) substitutos.add(eq.discId)
+      }
+      let escolha = -1
+      let custo = Number.POSITIVE_INFINITY
+      for (const [m, ch] of menu) {
+        if (!substitutos.has(m)) continue
+        const c = pool.has(m) ? 0 : ch
+        if (c > orcamentoMenu) continue
+        if (c < custo) {
+          escolha = m
+          custo = c
+        }
+      }
+      if (escolha < 0) {
+        sobraMenu.push(o)
+        continue
+      }
+      orcamentoMenu -= custo
+      gastoMenu += custo
+      if (!pool.has(escolha)) menuUsado.push(escolha)
+      cobertosMenu.push(o)
+    }
+    missing.length = 0
+    missing.push(...sobraMenu)
+  }
+  surplus = Math.max(0, surplus - gastoMenu)
 
   for (const q of target.quotas) {
     if (q.kind === 'atividade') continue
@@ -153,7 +200,16 @@ function margem(
   for (const o of missing) horas += o.ch
   for (const p of picks) horas += chDe(universo, p)
 
-  return { missing, horas, picks: [...picks], cobertos, livreUsado: livreAberto - livre }
+  return {
+    missing,
+    horas,
+    picks: [...picks],
+    cobertos,
+    cobertosMenu,
+    livreUsado: livreAberto - livre,
+    menuUsado,
+    gastoMenu,
+  }
 }
 
 /**
@@ -168,7 +224,9 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   let poolCh = 0
   for (const ch of done.chOf.values()) poolCh += ch
   let livreAberto = done.dcgHoras
-  const livreFechado = Math.max(0, done.freeHoras - done.dcgHoras)
+  let livreFechado = Math.max(0, done.freeHoras - done.dcgHoras)
+  let menuHoras = done.menuHoras
+  const menu = new Map(done.menu)
   const horasBase = poolCh + livreAberto + livreFechado
 
   const cursos = universo.cursos
@@ -185,6 +243,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
 
   // obrigatórias de outros currículos que entraram como DCG do curso-base
   const dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[] = []
+  const dcgEscolhas: { discId: number; codigo: string; nome: string; ch: number }[] = []
 
   const restantes = new Set<number>(
     cursos.filter((c) => !c.curso.nucleoComum).map((c) => c.curso.id),
@@ -201,7 +260,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     for (const id of restantes) {
       const target = porId.get(id)
       if (!target) continue
-      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, done, cursosDe)
+      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, done, cursosDe, menu, menuHoras)
       const chave = m.horas + m.missing.length * 1e-3 + target.curso.id * 1e-9
       if (chave < melhorChave) {
         melhorChave = chave
@@ -215,6 +274,19 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
 
     // a cota de DCG do curso-base "materializa" obrigatórias do alvo
     livreAberto -= melhor.livreUsado
+    // escolhas do menu de DCG: a disciplina do menu é que foi cursada
+    for (const mDid of melhor.menuUsado) {
+      const custo = menu.get(mDid) ?? 0
+      menu.delete(mDid)
+      menuHoras -= custo
+      livreFechado = Math.max(0, livreFechado - custo)
+      if (!pool.has(mDid)) {
+        pool.add(mDid)
+        poolCh += custo
+        const d = universo.disciplinas.get(mDid)
+        dcgEscolhas.push({ discId: mDid, codigo: d?.codigo ?? '', nome: d?.nome ?? '', ch: custo })
+      }
+    }
     for (const o of melhor.cobertos) {
       if (pool.has(o.discId)) continue
       pool.add(o.discId)
@@ -291,6 +363,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     carga,
     gargalos,
     dcgEstrategica,
+    dcgEscolhas,
     unicas,
     compartilhadas,
     metadeEm,

@@ -29,16 +29,17 @@ export function Metodo({ universo }: { universo: Universe }) {
             O que sobra precisa ser preenchido por eletivas/DCG.
           </p>
           <p className="tiny dim">
-            <b>DCG tem menu fechado</b> (128 das 129 cotas): só vale a lista de disciplinas
-            complementares do próprio currículo. A exceção é a cota aberta (ex.: SI/2026), que aceita
-            qualquer disciplina. E <b>TCC/TCG, estágio e monografia nunca contam como DCG</b> — o TCC
-            é do curso que vai dar o diploma, não se dispensa por cota.
+            <b>DCG é escolha estratégica:</b> a cota com menu (128 das 129) não é hora livre — ela
+            aceita só as disciplinas do menu, mas essas escolhas podem <b>dispensar obrigatórias de
+            outro curso</b> quando são equivalentes (ex.: <code>ELC1070</code> como DCG do CC
+            dispensa <code>UFSM01299</code> do SI). Cada escolha consome o orçamento de horas uma
+            vez. A cota aberta aceita qualquer disciplina não-terminal. E{' '}
+            <b>TCC/TCG, estágio e monografia nunca contam como DCG</b>.
           </p>
           <p className="tiny dim">
-            <b>DCG estratégica:</b> as horas de DCG do seu curso podem ter sido gastas nas
-            obrigatórias de outro curso <em>desde que elas estejam no seu menu de DCG</em> e os
-            pré-requisitos estejam cumpridos. O app assume isso por padrão (interruptor na barra
-            lateral); desligue para ver o cenário conservador.
+            Equivalências vêm de <code>v_equivalencia_efetiva</code>: oficial, julgada e{' '}
+            <b>heurística</b> (palpite de ementa, marcado como “sugestão” na UI). O interruptor{' '}
+            <em>DCG estratégica</em> liga/desliga as escolhas de DCG.
           </p>
 
           <h3>3. Custo de fechar um curso</h3>

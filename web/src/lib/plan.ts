@@ -5,12 +5,14 @@ export interface Done {
   ids: Set<number>
   /** horas de eletivas/DCG já cumpridas sem disciplina identificada (cota fechada) */
   freeHoras: number
-  /** horas de cota de DCG (menu ou aberta) que podem ser direcionadas */
+  /** horas de cota de DCG ABERTA (aceitam qualquer disciplina não-terminal) */
   dcgHoras: number
-  /** disciplinas elegíveis nos menus de DCG do curso-base (sem terminais) */
-  dcgElegiveis: Set<number>
   /** existe cota de DCG aberta (qualquer disciplina não-terminal) */
   dcgAberta: boolean
+  /** menu de DCG do curso-base: discId -> CH (escolhas possíveis) */
+  menu: Map<number, number>
+  /** orçamento em horas do menu de DCG (soma das cotas com menu) */
+  menuHoras: number
   /** TCC/TCG/estágio/monografia: nunca contam como DCG */
   terminais: Set<number>
   /** CH por disciplina (para o pool de eletivas reaproveitáveis) */
@@ -44,6 +46,12 @@ export interface QuotaPlan {
   sugestoes: { discId: number; codigo: string; nome: string; ch: number }[]
 }
 
+export interface DcgChoice {
+  oferta: Oferta
+  /** disciplina do menu do curso-base usada como DCG */
+  via: number
+}
+
 export interface CourseScore {
   target: CourseModel
   extraHoras: number
@@ -58,6 +66,8 @@ export interface CourseScore {
   fixedEquivParcial: Oferta[]
   /** obrigatórias cobertas pelas horas de DCG/cota aberta do curso de origem */
   fixedDcg: Oferta[]
+  /** obrigatórias dispensadas por escolhas do menu de DCG do curso-base */
+  fixedMenu: DcgChoice[]
   semestres: number
   schedule: Semester[]
   atividadesHoras: number
@@ -79,8 +89,9 @@ export function makeDone(
   const ch = new Map<number, number>()
   let freeHoras = 0
   let dcgHoras = 0
-  const dcgElegiveis = new Set<number>()
   let dcgAberta = false
+  const menu = new Map<number, number>()
+  let menuHoras = 0
 
   const curricular = base
     ? base.fixed.filter((o) => o.periodo >= 99 || concluidoAte === null || o.periodo <= concluidoAte)
@@ -117,21 +128,19 @@ export function makeDone(
       if (q.residual) continue
       // DCG com menu fechado não é "hora livre": só serve para preencher a
       // própria cota do curso, nunca para cobrir obrigatória de outro curso.
-      if (q.kind === 'dcg') {
-        if (q.menuFechado) {
-          for (const id of q.candidatos) dcgElegiveis.add(id)
-        } else {
-          dcgHoras += h
-          dcgAberta = true
+      if (q.kind === 'dcg' && q.menuFechado && q.candidatos.length) {
+        menuHoras += h
+        for (const id of q.candidatos) {
+          if (!menu.has(id)) menu.set(id, universo.disciplinas.get(id)?.ch ?? 0)
         }
-      } else if (q.kind === 'livre') {
+      } else if (q.kind === 'dcg' || q.kind === 'livre') {
         dcgHoras += h
         dcgAberta = true
       }
     }
   }
 
-  return { ids, freeHoras, dcgHoras, dcgElegiveis, dcgAberta, terminais: universo.terminais, chOf: ch }
+  return { ids, freeHoras, dcgHoras, dcgAberta, menu, menuHoras, terminais: universo.terminais, chOf: ch }
 }
 
 /** Pré-requisito efetivo (só disciplinas; período/CH ficam como sinal fraco). */
@@ -200,11 +209,9 @@ export function scoreCourse(
     else fixedMissing.push(o)
   }
 
-  // DCG estratégica: horas de DCG do curso de origem só podem ser gastas no
-  // menu daquele curso (ou em qualquer disciplina não-terminal, se a cota é
-  // aberta). TCC/estágio/monografia nunca são cobertos por cota.
-  const elegivelDcg = (id: number) =>
-    !done.terminais.has(id) && (done.dcgAberta || done.dcgElegiveis.has(id))
+  // DCG estratégica (cota aberta): horas livres do curso-base cobrem
+  // obrigatórias do alvo. TCC/estágio/monografia nunca entram.
+  const elegivelDcg = (id: number) => !done.terminais.has(id) && done.dcgAberta
   let livre = estrategica ? Math.min(done.dcgHoras, done.freeHoras) : 0
   let livreUsado = 0
   if (livre > 0 && fixedMissing.length) {
@@ -231,7 +238,41 @@ export function scoreCourse(
     fixedMissing.push(...restantes)
   }
 
-  let surplus = done.freeHoras - livreUsado
+  // DCG estratégica (menu): "cursar" itens do menu do curso-base que dispensam
+  // uma obrigatória do alvo (a própria disciplina ou uma equivalente oficial).
+  // O orçamento é consumido, então cada escolha vale uma vez só.
+  const fixedMenu: DcgChoice[] = []
+  let menuUsado = 0
+  if (estrategica && done.menuHoras > 0 && done.menu.size > 0 && fixedMissing.length) {
+    let orcamento = done.menuHoras
+    const sobraMenu: Oferta[] = []
+    for (const o of [...fixedMissing].sort((a, b) => b.ch - a.ch)) {
+      const substitutos = new Set<number>([o.discId])
+      for (const eq of target.equivals.get(o.discId) ?? []) {
+        if (eq.discId !== null) substitutos.add(eq.discId)
+      }
+      let escolha = -1
+      let custo = Number.POSITIVE_INFINITY
+      for (const [m, ch] of done.menu) {
+        if (!substitutos.has(m) || ch > orcamento) continue
+        if (ch < custo) {
+          escolha = m
+          custo = ch
+        }
+      }
+      if (escolha < 0) {
+        sobraMenu.push(o)
+        continue
+      }
+      orcamento -= custo
+      menuUsado += custo
+      fixedMenu.push({ oferta: o, via: escolha })
+    }
+    fixedMissing.length = 0
+    fixedMissing.push(...sobraMenu)
+  }
+
+  let surplus = done.freeHoras - livreUsado - menuUsado
   for (const [id, horas] of done.chOf) {
     if (target.fixedIds.has(id)) continue
     surplus += horas
@@ -338,10 +379,13 @@ export function scoreCourse(
 
   const schedule = agenda && !leve ? planSemesters(target, itens, done) : []
 
-  const overlapCh = [...fixedCovered, ...fixedEquiv, ...fixedEquivParcial, ...fixedDcg].reduce(
-    (s, o) => s + o.ch,
-    0,
-  )
+  const overlapCh = [
+    ...fixedCovered,
+    ...fixedEquiv,
+    ...fixedEquivParcial,
+    ...fixedDcg,
+    ...fixedMenu.map((c) => c.oferta),
+  ].reduce((s, o) => s + o.ch, 0)
 
   return {
     target,
@@ -354,6 +398,7 @@ export function scoreCourse(
     fixedEquiv,
     fixedEquivParcial,
     fixedDcg,
+    fixedMenu,
     semestres: agenda && !leve ? schedule.length : Math.ceil(extraHoras / Math.max(1, target.cargaSemestre)),
     schedule,
     atividadesHoras,

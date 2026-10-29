@@ -65,7 +65,7 @@ export interface PrereqBloco {
 export interface EquivItem {
   discId: number | null
   codigo: string | null
-  origem: 'oficial' | 'julgada'
+  origem: 'oficial' | 'julgada' | 'heuristica'
   confianca: number
   veredito: 'equivalente' | 'parcial'
 }

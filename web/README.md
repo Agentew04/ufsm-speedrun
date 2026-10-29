@@ -64,8 +64,9 @@ Resumo (detalhes em [`docs/frontend.md`](../docs/frontend.md)):
   currículo que a lista;
 - **obrigatórias** do alvo que você não tem = cadeiras novas;
 - **cotas** (`ch_minima` menos as obrigatórias do núcleo) precisam ser fechadas:
-  - `DCG` só vale dentro do **menu do próprio curso** (`dcg_elegivel`); cota
-    aberta (1 das 129) aceita qualquer disciplina não-terminal;
+  - `DCG` com menu é **escolha**: itens do menu podem dispensar obrigatórias do
+    alvo via equivalência (oficial/julgada/heurística), consumindo o orçamento
+    de horas; cota aberta (1 das 129) aceita qualquer disciplina não-terminal;
   - `eletiva/optativa de núcleo` é menu fechado — só vale o que está listado;
   - **TCC/TCG, estágio e monografia nunca contam como DCG** (`eh_terminal`);
 - **semestres extras** = bin-packing das cadeiras que faltam, respeitando

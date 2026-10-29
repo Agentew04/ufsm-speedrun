@@ -187,7 +187,7 @@ export function BasePanel({
             </div>
           )}
 
-          {done.dcgHoras > 0 ? (
+          {done.dcgHoras > 0 || done.menuHoras > 0 ? (
             <>
               <div className="divider" />
               <label className="toggle">
@@ -199,18 +199,16 @@ export function BasePanel({
                 DCG estratégica
               </label>
               <p className="hint tiny">
-                Você tem <b>{horas(done.dcgHoras)}</b> de DCG em <b>cota aberta</b> — só uma cota
-                sem menu aceita qualquer disciplina não-terminal. TCC, estágio e monografia nunca
-                entram como DCG.
-              </p>
-            </>
-          ) : done.dcgElegiveis.size > 0 ? (
-            <>
-              <div className="divider" />
-              <span className="label">DCG</span>
-              <p className="hint tiny">
-                Sua cota de DCG é um <b>menu fechado de {done.dcgElegiveis.size} disciplinas</b>: ela
-                não pode cobrir obrigatórias de outro curso, só preencher a própria cota.
+                {done.menuHoras > 0 && (
+                  <>
+                    Você tem <b>{horas(done.menuHoras)}</b> de DCG em menu fechado (
+                    {done.menu.size} opções) — escolhas do menu podem dispensar obrigatórias de
+                    outro curso, consumindo esse orçamento.{' '}
+                  </>
+                )}
+                {done.dcgHoras > 0 &&
+                  `${horas(done.dcgHoras)} são de cota aberta e aceitam qualquer disciplina não-terminal. `}
+                TCC, estágio e monografia nunca entram.
               </p>
             </>
           ) : null}

@@ -1054,3 +1054,6 @@ select { appearance: none; cursor: pointer; padding-right: 26px;
 
 .restr { color: var(--amber); opacity: 0.85; }
 
+
+.b-heur { color: var(--violet); background: rgba(183, 155, 255, 0.12); }
+

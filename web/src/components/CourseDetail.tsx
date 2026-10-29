@@ -145,7 +145,8 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
             {score.fixedCovered.length +
               score.fixedEquiv.length +
               score.fixedEquivParcial.length +
-              score.fixedDcg.length}{' '}
+              score.fixedDcg.length +
+              score.fixedMenu.length}{' '}
             de {target.fixed.length} obrigatórias
           </span>
         </div>
@@ -290,7 +291,8 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
               {score.fixedCovered.length === 0 &&
               score.fixedEquiv.length === 0 &&
               score.fixedEquivParcial.length === 0 &&
-              score.fixedDcg.length === 0 ? (
+              score.fixedDcg.length === 0 &&
+              score.fixedMenu.length === 0 ? (
                 <p className="hint">Nenhuma obrigatória em comum com o que você já cumpriu.</p>
               ) : (
                 <ul className="covered">
@@ -301,13 +303,33 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
                       <span className="mono tiny dim">{o.ch}h</span>
                     </li>
                   ))}
-                  {score.fixedEquiv.map((o) => (
-                    <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
-                      <span className="cl-code">{o.codigo}</span>
-                      <span className="disc-name">{o.nome}</span>
-                      <span className="badge b-equiv">equiv</span>
-                    </li>
-                  ))}
+                  {score.fixedEquiv.map((o) => {
+                    const eq = (target.equivals.get(o.discId) ?? []).find(
+                      (it) => it.discId !== null && done.ids.has(it.discId),
+                    )
+                    const rotulo =
+                      eq?.origem === 'heuristica'
+                        ? 'sugestão'
+                        : eq?.origem === 'julgada'
+                          ? 'julgada'
+                          : 'equiv'
+                    return (
+                      <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
+                        <span className="cl-code">{o.codigo}</span>
+                        <span className="disc-name">{o.nome}</span>
+                        <span
+                          className={`badge ${eq?.origem === 'heuristica' ? 'b-heur' : 'b-equiv'}`}
+                          title={
+                            eq
+                              ? `${eq.origem}${eq.origem === 'heuristica' ? ` · confiança ${Math.round(eq.confianca * 100)}%` : ''}`
+                              : undefined
+                          }
+                        >
+                          {rotulo}
+                        </span>
+                      </li>
+                    )
+                  })}
                   {score.fixedEquivParcial.map((o) => (
                     <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
                       <span className="cl-code">{o.codigo}</span>
@@ -324,20 +346,58 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
                       <span className="badge b-dcg">DCG</span>
                     </li>
                   ))}
+                  {score.fixedMenu.map((c) => {
+                    const via = universo.disciplinas.get(c.via)
+                    return (
+                      <li
+                        key={`m${c.oferta.id}`}
+                        className="is-click"
+                        tabIndex={0}
+                        title={`ver ementa · dispensada por ${via?.codigo ?? c.via} (DCG do seu curso)`}
+                        onClick={() => onDisc(c.oferta.discId)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') onDisc(c.oferta.discId)
+                        }}
+                      >
+                        <span className="cl-code">{c.oferta.codigo}</span>
+                        <span className="disc-name">{c.oferta.nome}</span>
+                        <span className="badge b-dcg">via {via?.codigo ?? c.via}</span>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
               {score.fixedEquivParcial.length > 0 && (
                 <p className="note tiny">
-                  <b>~equiv</b> = par julgado <em>parcial</em> pela heurística de ementa (Fase 6a):
-                  conta como cobertura, mas com confiança menor. Vale conferir antes de apostar.
+                  <b>~equiv</b> = par julgado <em>parcial</em> (Fase 6a): conta como cobertura, mas
+                  com confiança menor. <b>sugestão</b> = palpite heurístico de ementa ainda não
+                  julgado — confira antes de apostar.
                 </p>
               )}
               {score.fixedDcg.length > 0 && (
                 <p className="note tiny">
-                  <b>{horas(score.fixedDcg.reduce((s, o) => s + o.ch, 0))}</b> dessas cadeiras estão
-                  no <b>menu de DCG do seu curso</b> — você pode tê-las cursado como DCG no curso de
-                  origem. TCC, estágio e monografia nunca entram nessa conta. Ajuste em{' '}
-                  <em>DCG estratégica</em> na barra lateral.
+                  <b>{horas(score.fixedDcg.reduce((s, o) => s + o.ch, 0))}</b> dessas cadeiras vieram
+                  da sua <b>cota aberta de DCG</b> (qualquer disciplina não-terminal). TCC, estágio e
+                  monografia nunca entram nessa conta. Ajuste em <em>DCG estratégica</em> na barra
+                  lateral.
+                </p>
+              )}
+              {score.fixedMenu.length > 0 && (
+                <p className="note tiny">
+                  <b>{score.fixedMenu.length}</b> obrigatórias dispensadas por escolhas no{' '}
+                  <b>menu de DCG do seu curso</b> (
+                  {horas(
+                    score.fixedMenu.reduce((s, c) => s + (done.menu.get(c.via) ?? 0), 0),
+                  )}{' '}
+                  do orçamento). Obrigatória→escolha:{' '}
+                  {score.fixedMenu
+                    .slice(0, 4)
+                    .map(
+                      (c) =>
+                        `${c.oferta.codigo}→${universo.disciplinas.get(c.via)?.codigo ?? c.via}`,
+                    )
+                    .join(', ')}
+                  {score.fixedMenu.length > 4 ? '…' : ''}.
                 </p>
               )}
               {score.freeFilledByDone > 0 && (
