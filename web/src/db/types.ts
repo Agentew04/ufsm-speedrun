@@ -47,6 +47,8 @@ export interface Oferta {
   nome: string
   temPrereq: boolean
   temEquiv: boolean
+  /** "período vencido": só pode entrar a partir do período N+1 */
+  periodoMinimo: number | null
 }
 
 export interface PrereqItem {
@@ -102,6 +104,8 @@ export interface CourseModel {
   byDisc: Map<number, Oferta>
   prereqs: Map<number, PrereqBloco[]>
   equivals: Map<number, EquivItem[]>
+  /** exigência de CH por estrutura (estruturaId nulo = total do curso) */
+  requisitoCh: Map<number, { estruturaId: number | null; horas: number }[]>
 }
 
 // Catálogo global de disciplinas. `ch` em horas.

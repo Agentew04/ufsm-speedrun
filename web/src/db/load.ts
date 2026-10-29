@@ -123,7 +123,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
   const ofertasRaw = q<Record<string, unknown>>(
     db,
     `SELECT dc.id, dc.versao_id, dc.estrutura_id, dc.disciplina_id, dc.tipo_item,
-            dc.periodo_ideal, dc.tem_prereq, dc.tem_equiv,
+            dc.periodo_ideal, dc.periodo_minimo, dc.tem_prereq, dc.tem_equiv,
             d.codigo, d.nome, d.ch_total, d.creditos
        FROM disciplina_curriculo dc
        JOIN disciplina d ON d.id = dc.disciplina_id
@@ -140,8 +140,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
        JOIN prereq_item pi ON pi.bloco_id = pb.id`,
   )
 
-  onProgress?.({ label: 'lendo equivalências' })
-  // v_equivalencia_efetiva = oficial + julgadas (Fase 6a/6b). Bancos antigos
+  onProgress?.({ label: 'lendo equivalências' })  // v_equivalencia_efetiva = oficial + julgadas (Fase 6a/6b). Bancos antigos
   // podem não ter a view nem a tabela de julgadas — daí os fallbacks.
   const EQUIV_OFICIAL = `
     SELECT dc.disciplina_id AS alvo_id, ei.disciplina_req_id AS substituta_id,
@@ -254,6 +253,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
       nome: str(o.nome),
       temPrereq: num(o.tem_prereq) === 1,
       temEquiv: num(o.tem_equiv) === 1,
+      periodoMinimo: optNum(o.periodo_minimo),
     }
     const list = ofertasByVersao.get(oferta.versaoId)
     if (list) list.push(oferta)
@@ -303,6 +303,23 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     const list = equivByDisc.get(alvo)
     if (list) list.push(item)
     else equivByDisc.set(alvo, [item])
+  }
+
+  // exigências de CH por estrutura (tipo 3 do SIE). Estrutura nula = total do curso.
+  const reqChByDc = new Map<number, { estruturaId: number | null; horas: number }[]>()
+  try {
+    for (const r of q<Record<string, unknown>>(
+      db,
+      'SELECT disciplina_curriculo_id AS dc_id, estrutura_id, horas FROM requisito_ch',
+    )) {
+      const dcId = num(r.dc_id)
+      const item = { estruturaId: optNum(r.estrutura_id), horas: num(r.horas) }
+      const lista = reqChByDc.get(dcId)
+      if (lista) lista.push(item)
+      else reqChByDc.set(dcId, [item])
+    }
+  } catch {
+    /* banco sem requisito_ch */
   }
 
   // DCG: menu fechado materializado no ETL (`dcg_elegivel`) + terminais.
@@ -375,6 +392,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
       equivByDisc,
       dcgMenu,
       terminais,
+      reqChByDc,
     )
     models.push(model)
   }
@@ -420,6 +438,7 @@ function buildCourse(
   equivByDisc: Map<number, EquivItem[]>,
   dcgMenu: Map<number, { ids: number[]; fonte: string }>,
   terminais: Set<number>,
+  reqChByDc: Map<number, { estruturaId: number | null; horas: number }[]>,
 ): CourseModel {
   const byDisc = new Map<number, Oferta>()
   for (const o of ofertas) {
@@ -553,11 +572,14 @@ function buildCourse(
 
   const prereqs = new Map<number, PrereqBloco[]>()
   const equivals = new Map<number, EquivItem[]>()
+  const requisitoCh = new Map<number, { estruturaId: number | null; horas: number }[]>()
   for (const o of ofertas) {
     const p = prereqByDc.get(o.id)
     if (p) prereqs.set(o.discId, p)
     const e = equivByDisc.get(o.discId)
     if (e) equivals.set(o.discId, e)
+    const r = reqChByDc.get(o.id)
+    if (r) requisitoCh.set(o.discId, r)
   }
 
   return {
@@ -575,5 +597,6 @@ function buildCourse(
     byDisc,
     prereqs,
     equivals,
+    requisitoCh,
   }
 }

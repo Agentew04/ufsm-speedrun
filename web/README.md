@@ -68,8 +68,9 @@ Resumo (detalhes em [`docs/frontend.md`](../docs/frontend.md)):
     aberta (1 das 129) aceita qualquer disciplina não-terminal;
   - `eletiva/optativa de núcleo` é menu fechado — só vale o que está listado;
   - **TCC/TCG, estágio e monografia nunca contam como DCG** (`eh_terminal`);
-- **semestres extras** = bin-packing das cadeiras que faltam, respeitando os
-  pré-requisitos catalogados e a CH máxima por período do curso-alvo;
+- **semestres extras** = bin-packing das cadeiras que faltam, respeitando
+  pré-requisitos, período mínimo (`periodo_minimo`) e CH por estrutura
+  (`requisito_ch`) e a CH máxima por período do curso-alvo;
 - **equivalência efetiva** (`v_equivalencia_efetiva`: oficial + 943 pares
   julgados) credita a disciplina antiga no lugar da nova; `parcial` entra com
   badge mais fraco.

@@ -94,10 +94,20 @@ semestres       = tamanho do plano (bin-packing)
 ```
 
 **Plano semestral (heurística):** cada disciplina faltante recebe o semestre
-mais cedo possível a partir dos pré-requisitos oficiais (OR entre blocos, AND
-dentro do bloco; pré-requisito fora do currículo-alvo é ignorado). Depois as
-disciplinas são empacotadas em semestres respeitando `cargaSemestre`. Ciclos de
-pré-requisito caem num bloco final em vez de travar.
+mais cedo possível considerando:
+
+- **pré-requisitos** oficiais (OR entre blocos, AND dentro; pré-requisito fora do
+  currículo-alvo é ignorado);
+- **período vencido** (`disciplina_curriculo.periodo_minimo = N`): só a partir do
+  semestre `N+1`;
+- **CH por estrutura** (`requisito_ch`): exige `horas` já cumpridas naquela
+  estrutura; `estrutura_id` nulo = total do curso. A curva é a CH das
+  obrigatórias por período ideal; quando a estrutura não tem timeline, vale ao
+  menos o período ideal da própria disciplina;
+- **teto de CH por semestre** do currículo-alvo.
+
+Disciplinas reais entram primeiro; as eletivas sintéticas ("a escolher") preenchem
+as sobras. Ciclos de pré-requisito caem num bloco final em vez de travar.
 
 **DCG:** menu fechado (128 das 129 cotas) — `dcg_elegivel` diz o que pode
 preencher cada cota, já sem as disciplinas terminais. Uma cota com menu **não é
@@ -155,7 +165,8 @@ visível.
 
 | limite | impacto | próximo passo |
 |---|---|---|
-| pré-requisitos ~25% das ofertas (100% das que declaram) | plano semestral otimista | nada no front; depende da Fase 3 |
+| pré-requisitos ~25% das ofertas (100% das que declaram) | plano semestral otimista | materializados; a coleta mantém atualizado |
+| período vencido (301 ofertas) e CH por estrutura (79) | agenda furava a ordem oficial | `periodo_minimo` + `requisito_ch` no `earliest()` (§3) |
 | equivalências | resolvido em 2026-10-28 (5.003 pares) | manter de olho na reingestão |
 | ementas 79% preenchidas | nenhum (ainda não usadas) | Fase 6a + badge na UI |
 | reformas trocam códigos | queda brusca de sobreposição (ex.: CC/2026) | equivalência oficial já cobre parte |

@@ -365,8 +365,9 @@ export function scoreCourse(
 }
 
 /**
- * Aloca as disciplinas faltantes em semestres respeitando pré-requisitos
- * (quando existem) e o limite de CH por semestre do curso-alvo.
+ * Aloca as disciplinas faltantes em semestres respeitando pré-requisitos,
+ * período mínimo ("vencido"), CH mínima por estrutura e o limite de CH por
+ * semestre do curso-alvo.
  */
 export function planSemesters(target: CourseModel, itens: SemesterItem[], done: Done): Semester[] {
   if (!itens.length) return []
@@ -375,13 +376,98 @@ export function planSemesters(target: CourseModel, itens: SemesterItem[], done: 
   const visiting = new Set<number>()
   const missing = new Set(itens.filter((i) => i.discId !== null).map((i) => i.discId as number))
 
+  // período mínimo por disciplina (pode variar entre ofertas: pega o maior)
+  const periodoMinimo = new Map<number, number>()
+  for (const o of target.ofertas) {
+    const pm = o.periodoMinimo ?? 0
+    if (pm > 0) periodoMinimo.set(o.discId, Math.max(periodoMinimo.get(o.discId) ?? 0, pm))
+  }
+
+  // CH acumulada por período das obrigatórias do curso, por estrutura e no total
+  const chPorEstrutura = new Map<number | null, { periodo: number; acum: number }[]>()
+  const bruto = new Map<number | null, Map<number, number>>()
+  const soma = (chave: number | null, periodo: number, ch: number) => {
+    const porPeriodo = bruto.get(chave) ?? new Map<number, number>()
+    porPeriodo.set(periodo, (porPeriodo.get(periodo) ?? 0) + ch)
+    bruto.set(chave, porPeriodo)
+  }
+  for (const o of target.fixed) {
+    if (o.periodo >= 99) continue
+    soma(o.estruturaId, o.periodo, o.ch)
+    soma(null, o.periodo, o.ch)
+  }
+  for (const [chave, porPeriodo] of bruto) {
+    const periodos = [...porPeriodo.entries()].sort((a, b) => a[0] - b[0])
+    let acum = 0
+    chPorEstrutura.set(
+      chave,
+      periodos.map(([periodo, ch]) => {
+        acum += ch
+        return { periodo, acum }
+      }),
+    )
+  }
+
+  // CH que o aluno já tem em cada estrutura do curso-alvo
+  const chFeita = new Map<number | null, number>()
+  const vistosEstrutura = new Map<number | null, Set<number>>()
+  const vistosTotal = new Set<number>()
+  for (const o of target.ofertas) {
+    if (!done.ids.has(o.discId)) continue
+    const set = vistosEstrutura.get(o.estruturaId) ?? new Set<number>()
+    if (!set.has(o.discId)) {
+      set.add(o.discId)
+      chFeita.set(o.estruturaId, (chFeita.get(o.estruturaId) ?? 0) + o.ch)
+      vistosEstrutura.set(o.estruturaId, set)
+    }
+    if (!vistosTotal.has(o.discId)) {
+      vistosTotal.add(o.discId)
+      chFeita.set(null, (chFeita.get(null) ?? 0) + o.ch)
+    }
+  }
+
+  const memoRestricao = new Map<number, number>()
+  /** período mais cedo possível só pelas condições estáticas (tipo 5 e tipo 3) */
+  const restricaoEstatica = (discId: number): number => {
+    const cache = memoRestricao.get(discId)
+    if (cache !== undefined) return cache
+    let resultado = 1
+
+    const pm = periodoMinimo.get(discId) ?? 0
+    if (pm > 0) resultado = Math.max(resultado, pm + 1)
+
+    const exigencias = target.requisitoCh.get(discId)
+    if (exigencias?.length) {
+      const proprio = target.byDisc.get(discId)?.periodo ?? 99
+      const piso = proprio > 0 && proprio < 99 ? proprio : 0
+      for (const req of exigencias) {
+        const ja = chFeita.get(req.estruturaId) ?? 0
+        if (ja >= req.horas) continue
+        const falta = req.horas - ja
+        const curva = chPorEstrutura.get(req.estruturaId) ?? []
+        const ponto = curva.find((p) => p.acum >= falta)
+        if (ponto) {
+          resultado = Math.max(resultado, ponto.periodo + 1)
+        } else {
+          // sem timeline da estrutura: respeita ao menos o período ideal da
+          // própria disciplina (senão a exigência sumiria da agenda)
+          const ultimo = curva.length ? curva[curva.length - 1].periodo : 0
+          resultado = Math.max(resultado, ultimo, piso)
+        }
+      }
+    }
+
+    memoRestricao.set(discId, resultado)
+    return resultado
+  }
+
   const earliest = (discId: number): number => {
     const cached = memo.get(discId)
     if (cached !== undefined) return cached
     if (visiting.has(discId)) return 1
     visiting.add(discId)
     const blocos = target.prereqs.get(discId)
-    let resultado = 1
+    let resultado = restricaoEstatica(discId)
     if (blocos && blocos.length) {
       let melhor = Number.POSITIVE_INFINITY
       for (const bloco of blocos) {
@@ -395,7 +481,7 @@ export function planSemesters(target: CourseModel, itens: SemesterItem[], done: 
         }
         melhor = Math.min(melhor, pronto + 1)
       }
-      if (Number.isFinite(melhor)) resultado = Math.max(1, melhor)
+      if (Number.isFinite(melhor)) resultado = Math.max(resultado, melhor)
     }
     visiting.delete(discId)
     memo.set(discId, resultado)
@@ -410,7 +496,14 @@ export function planSemesters(target: CourseModel, itens: SemesterItem[], done: 
     const disponiveis = restantes
       .map((it) => ({ it, inicio: it.discId === null ? 1 : earliest(it.discId) }))
       .filter((x) => x.inicio <= indice)
-      .sort((a, b) => a.inicio - b.inicio || b.it.ch - a.it.ch)
+      // disciplinas reais primeiro; as eletivas sintéticas ("a escolher") vão
+      // preenchendo as sobras no fim, não os primeiros semestres
+      .sort(
+        (a, b) =>
+          a.inicio - b.inicio ||
+          Number(a.it.sintetico) - Number(b.it.sintetico) ||
+          b.it.ch - a.it.ch,
+      )
 
     if (!disponiveis.length) {
       // ciclo de pré-requisitos ou dado inconsistente: joga o resto num bloco

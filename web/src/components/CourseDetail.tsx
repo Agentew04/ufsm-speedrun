@@ -19,16 +19,38 @@ function resumoPrereq(target: CourseModel, discId: number): string[] {
   if (!blocos?.length) return []
   const saida: string[] = []
   for (const bloco of blocos) {
-    const itens = bloco.itens.map((it) => {
-      if ((it.tipo === 1 || it.tipo === 2) && (it.codigo || it.discId)) return it.codigo ?? `#${it.discId}`
-      if (it.tipo === 3) return `${it.numero ?? '?'} h`
-      if (it.tipo === 4) return `${it.numero ?? '?'} créd.`
-      if (it.tipo === 5) return `≥ ${it.numero ?? '?'}º período`
-      return '?'
-    })
+    const itens = bloco.itens
+      .filter((it) => it.tipo !== 5) // período vencido aparece em `resumoRestricao`
+      .map((it) => {
+        if ((it.tipo === 1 || it.tipo === 2) && (it.codigo || it.discId)) return it.codigo ?? `#${it.discId}`
+        if (it.tipo === 3) return `${it.numero ?? '?'} h`
+        if (it.tipo === 4) return `${it.numero ?? '?'} créd.`
+        return '?'
+      })
     if (itens.length) saida.push(itens.join(' + '))
   }
   return saida
+}
+
+/** Condições estáticas do SIE: período vencido (5) e CH por estrutura (3). */
+function resumoRestricao(target: CourseModel, discId: number): string | null {
+  const partes: string[] = []
+
+  const pm = Math.max(
+    0,
+    ...target.ofertas.filter((o) => o.discId === discId).map((o) => o.periodoMinimo ?? 0),
+  )
+  if (pm > 0) partes.push(`≥ ${pm + 1}º semestre`)
+
+  for (const req of target.requisitoCh.get(discId) ?? []) {
+    const nome =
+      req.estruturaId === null
+        ? 'o total do curso'
+        : (target.estruturas.find((e) => e.id === req.estruturaId)?.descricao ?? 'um núcleo')
+    partes.push(`${horas(req.horas)} em ${nome}`)
+  }
+
+  return partes.length ? partes.join(' · ') : null
 }
 
 export function CourseDetail({ universo, base, target, score, done, onDisc }: Props) {
@@ -168,6 +190,7 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
                   </div>
                   {lista.map((o) => {
                     const reqs = resumoPrereq(target, o.discId)
+                    const restr = resumoRestricao(target, o.discId)
                     return (
                       <button
                         key={o.id}
@@ -186,6 +209,11 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
                           <span className="req" title={`pré-requisito (OR entre blocos): ${reqs.join(' | ')}`}>
                             req {reqs[0]}
                             {reqs.length > 1 ? '…' : ''}
+                          </span>
+                        )}
+                        {restr && (
+                          <span className="req restr" title="condição de período/carga horária do SIE">
+                            {restr}
                           </span>
                         )}
                       </button>
@@ -363,9 +391,9 @@ export function CourseDetail({ universo, base, target, score, done, onDisc }: Pr
                   ))}
                 </div>
                 <p className="note tiny">
-                  Heurística: respeita os pré-requisitos catalogados e o limite de{' '}
-                  {horas(target.cargaSemestre)}/semestre. A coleta de pré-requisitos pode estar
-                  incompleta — trate como recomendação, não como grade oficial.
+                  Heurística: respeita pré-requisitos, período mínimo e CH por estrutura, com limite
+                  de {horas(target.cargaSemestre)}/semestre. A coleta pode estar incompleta — trate
+                  como recomendação, não como grade oficial.
                 </p>
               </div>
             )}
