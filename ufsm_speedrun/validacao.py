@@ -261,6 +261,22 @@ def checar_julgamento(conn: sqlite3.Connection) -> Achado:
             "GROUP BY veredito ORDER BY COUNT(*) DESC"
         )
     )
+    terminais_view = _escalar(
+        conn,
+        """
+        SELECT COUNT(*) FROM v_equivalencia_efetiva v
+        JOIN disciplina a ON a.id = v.alvo_id
+        JOIN disciplina b ON b.id = v.substituta_id
+        WHERE a.eh_terminal = 1 OR b.eh_terminal = 1
+        """,
+    )
+    if terminais_view:
+        return Achado(
+            "Adjudicação da banda prioritária (Fase 6b)", "problema",
+            f"{total} pares julgados ({resumo}) · ❗ {terminais_view} pares com "
+            "disciplina terminal na view (TCC não se equivale)",
+        )
+
     return Achado(
         "Adjudicação da banda prioritária (Fase 6b)",
         "atencao" if orfaos else "ok",

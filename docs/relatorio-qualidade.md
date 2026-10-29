@@ -1,6 +1,6 @@
 # Relatório de qualidade dos dados
 
-Gerado em 2026-10-29T02:24:39Z por `python -m ufsm_speedrun validar`.
+Gerado em 2026-10-29T14:04:28Z por `python -m ufsm_speedrun validar`.
 
 | | verificação | situação |
 |---|---|---|

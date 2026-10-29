@@ -18,26 +18,51 @@ Atualize a cópia (`data/ufsm.db` → `web/public/ufsm.db`) antes de testar.
 
 ## 2. Trocar a origem das equivalências (maior ganho)
 
-Hoje `web/src/db/load.ts:111` lê `equivalencia_bloco`/`equivalencia_item` — só o
-que o SIE declara. A view nova entrega tudo já no formato `alvo → substituta`:
+`web/src/db/load.ts:111` lê `equivalencia_bloco`/`equivalencia_item` — só o que o
+SIE declara. A view entrega tudo já no formato `alvo → substituta`:
 
 ```sql
 SELECT alvo_id, substituta_id, origem, confianca, veredito
 FROM v_equivalencia_efetiva;
 ```
 
-- `origem`: `oficial` | `julgada`
+- `origem`: `oficial` | `julgada` | `heuristica` | `transitiva`
 - `veredito`: `equivalente` | `parcial`
 
-**Ganho medido no auditor**: incluindo as julgadas, a rota que fecha os 145
-cursos cai de **5.144 → 4.981 disciplinas** e de **309.175 h → 301.180 h**
-(−163 disciplinas, −7.995 h).
+| origem | o que é | sugestão de UI |
+|---|---|---|
+| `oficial` | o SIE declara | selo normal |
+| `julgada` | LLM revisou (943 pares) | selo "revisado" |
+| `heuristica` | TF-IDF forte, nunca revisado | selo "sugestão (0,91)" |
+| `transitiva` | fechamento de 2–3 saltos | selo "via <código>" |
 
-Estado atual: **943 pares julgados** (478 `equivalente`, 323 `parcial`,
-142 `nao_equivalente`).
+### Duas regras que não são opcionais
 
-Sugestão de UI: badge `oficial` / `julgada (conf. 0,9)` no card da equivalência, e
-tratar `parcial` como sinal mais fraco (não somar no `fixedEquiv` sem avisar).
+**1. Nenhuma equivalência envolvendo disciplina terminal (TCC, estágio,
+monografia) aparece na view.** TCC não se dispensa por equivalência nem por cota.
+Antes dessa regra, a adjudicação gerou **415 pares TCC × TCC** (ementas genéricas,
+tipo "elaborar o trabalho de conclusão") e eles estavam "cobrindo" TCCs na UI —
+os TCCs sumiam de "cadeiras novas".
+
+**2. Transitividade.** `python -m ufsm_speedrun fechar` fecha 2–3 saltos
+(11.344 pares). O caso real:
+
+```
+ELC1086 METODOLOGIA DE PESQUISA EM INFORMÁTICA           (CC, código antigo)
+ELC1077 METODOLOGIA DE PESQUISA EM SISTEMAS DE INFORMAÇÃO (CC, código novo)
+UFSM01310 METODOLOGIA DE PESQUISA EM SISTEMAS DE INFORMAÇÃO (SI)
+
+    ELC1086 ≡ ELC1077 (0,84)  ·  ELC1077 ≡ UFSM01310 (0,59)
+    => ELC1086 ≡ UFSM01310  (transitiva, 0,59)
+```
+
+Sem fechamento, quem fez a disciplina antiga não "vê" a nova.
+
+**Ganho medido no auditor**: a rota que fecha os 145 cursos cai de
+**5.144 → 4.192 disciplinas** e de **309.175 → 258.760 h**.
+
+Estado: 25.322 pares na view (4.707 oficiais, 1.314 julgadas, 7.957 heurísticas,
+11.344 transitivas).
 
 ## 3. Classificação de ABI saiu da UI
 

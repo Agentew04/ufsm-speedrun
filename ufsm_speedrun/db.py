@@ -50,35 +50,46 @@ WITH oficiais AS (
     JOIN disciplina_curriculo dc ON dc.id = eb.disciplina_curriculo_id
     WHERE ei.disciplina_req_id IS NOT NULL
       AND ei.disciplina_req_id <> dc.disciplina_id
+),
+todas AS (
+    SELECT alvo_id, substituta_id, 'oficial' AS origem, 1.0 AS confianca,
+           'equivalente' AS veredito
+    FROM oficiais
+    UNION ALL
+    SELECT disciplina_a, disciplina_b, 'julgada', confianca, veredito
+    FROM equivalencia_julgada WHERE veredito IN ('equivalente', 'parcial')
+    UNION ALL
+    SELECT disciplina_b, disciplina_a, 'julgada', confianca, veredito
+    FROM equivalencia_julgada WHERE veredito IN ('equivalente', 'parcial')
+    UNION ALL
+    -- palpite heurístico forte (nunca julgado)
+    SELECT se.disciplina_a, se.disciplina_b, 'heuristica', se.score_final, 'equivalente'
+    FROM similaridade_ementa se
+    WHERE se.veredito = 'equivalente'
+      AND NOT EXISTS (SELECT 1 FROM oficiais o
+                      WHERE o.alvo_id = se.disciplina_a AND o.substituta_id = se.disciplina_b)
+      AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
+                      WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
+                         OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a))
+    UNION ALL
+    SELECT se.disciplina_b, se.disciplina_a, 'heuristica', se.score_final, 'equivalente'
+    FROM similaridade_ementa se
+    WHERE se.veredito = 'equivalente'
+      AND NOT EXISTS (SELECT 1 FROM oficiais o
+                      WHERE o.alvo_id = se.disciplina_b AND o.substituta_id = se.disciplina_a)
+      AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
+                      WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
+                         OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a))
+    UNION ALL
+    -- fechamento transitivo (ELC1086 == ELC1077 == UFSM01310)
+    SELECT alvo_id, substituta_id, 'transitiva', confianca, 'equivalente'
+    FROM equivalencia_fechada
 )
-SELECT alvo_id, substituta_id, 'oficial' AS origem, 1.0 AS confianca,
-       'equivalente' AS veredito
-FROM oficiais
-UNION ALL
-SELECT ej.disciplina_a, ej.disciplina_b, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
-UNION ALL
-SELECT ej.disciplina_b, ej.disciplina_a, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
-UNION ALL
--- palpite heurístico forte (nunca julgado): entra como 'heuristica', simétrico
-SELECT se.disciplina_a, se.disciplina_b, 'heuristica', se.score_final, 'equivalente'
-FROM similaridade_ementa se
-WHERE se.veredito = 'equivalente'
-  AND NOT EXISTS (SELECT 1 FROM oficiais o
-                  WHERE o.alvo_id = se.disciplina_a AND o.substituta_id = se.disciplina_b)
-  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
-                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
-                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a))
-UNION ALL
-SELECT se.disciplina_b, se.disciplina_a, 'heuristica', se.score_final, 'equivalente'
-FROM similaridade_ementa se
-WHERE se.veredito = 'equivalente'
-  AND NOT EXISTS (SELECT 1 FROM oficiais o
-                  WHERE o.alvo_id = se.disciplina_b AND o.substituta_id = se.disciplina_a)
-  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
-                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
-                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a));
+SELECT t.alvo_id, t.substituta_id, t.origem, t.confianca, t.veredito
+FROM todas t
+JOIN disciplina a ON a.id = t.alvo_id
+JOIN disciplina b ON b.id = t.substituta_id
+WHERE a.eh_terminal = 0 AND b.eh_terminal = 0;
 """
 
 
@@ -117,6 +128,14 @@ def migrar(conn: sqlite3.Connection) -> None:
             semestres      INTEGER NOT NULL,
             calculado_em   TEXT,
             PRIMARY KEY (base_curso_id, alvo_curso_id)
+        );
+        CREATE TABLE IF NOT EXISTS equivalencia_fechada (
+            alvo_id       INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+            substituta_id INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+            saltos        INTEGER NOT NULL,
+            confianca     REAL,
+            via_id        INTEGER,
+            PRIMARY KEY (alvo_id, substituta_id)
         );
         CREATE TABLE IF NOT EXISTS dcg_elegivel (
             curso_id      INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,

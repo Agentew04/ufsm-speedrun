@@ -173,13 +173,12 @@ não impediria nada que o menu já não impeça.
 
 | política | disciplinas na rota | horas |
 |---|---|---|
-| `aberta` (curinga) | 4.509 | 273.405 |
-| `menu` (fechado + escolha estratégica) | **4.684** | **282.780** |
+| `aberta` (curinga) | 4.192 | 258.760 |
+| `menu` (fechado + escolha estratégica) | **4.353** | **267.625** |
 
-O menu fechado custa **+175 disciplinas** em relação ao curinga — é o preço de não
-poder inventar. Mas o número absoluto caiu muito nos dois lados depois que a view
-passou a expor as 4.829 equivalências heurísticas (antes 4.981 → agora 4.509 no
-modo aberto).
+O menu fechado custa **+161 disciplinas** em relação ao curinga — é o preço de não
+poder inventar. Mas o número absoluto caiu muito nos dois lados depois do
+fechamento transitivo das equivalências e da exclusão de terminais.
 
 O que **não** pode faltar junto com o menu é a escolha estratégica (ver
 `docs/nota-frontend.md §5`): sem ela, fechar o menu derruba o aproveitamento de

@@ -308,6 +308,16 @@ CREATE TABLE IF NOT EXISTS dcg_elegivel (
 CREATE INDEX IF NOT EXISTS idx_dcg_curso ON dcg_elegivel(curso_id, estrutura_id);
 CREATE INDEX IF NOT EXISTS idx_dcg_disc  ON dcg_elegivel(disciplina_id);
 
+-- Equivalências por transitividade (ELC1086 ≡ ELC1077 ≡ UFSM01310).
+-- Calculada por `python -m ufsm_speedrun fechar`.
+CREATE TABLE IF NOT EXISTS equivalencia_fechada (
+    alvo_id       INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+    substituta_id INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+    saltos        INTEGER NOT NULL,
+    confianca     REAL,
+    via_id        INTEGER,
+    PRIMARY KEY (alvo_id, substituta_id)
+);
 -- -----------------------------------------------------------------------------
 -- Auditoria do otimizador (Fase 6c) — para alinhar Python e o front TS
 -- -----------------------------------------------------------------------------
@@ -333,44 +343,9 @@ CREATE TABLE IF NOT EXISTS rota_benchmark (
 -- -----------------------------------------------------------------------------
 -- Views de conveniência (para a dashboard e para queries exploratórias)
 -- -----------------------------------------------------------------------------
--- Equivalência efetiva = o que o SIE declara + o que foi julgado equivalente.
--- É a view que o front deve consumir no lugar de `equivalencia_item`.
-CREATE VIEW IF NOT EXISTS v_equivalencia_efetiva AS
-WITH oficiais AS (
-    SELECT dc.disciplina_id AS alvo_id, ei.disciplina_req_id AS substituta_id
-    FROM equivalencia_item ei
-    JOIN equivalencia_bloco eb   ON eb.id = ei.bloco_id
-    JOIN disciplina_curriculo dc ON dc.id = eb.disciplina_curriculo_id
-    WHERE ei.disciplina_req_id IS NOT NULL
-      AND ei.disciplina_req_id <> dc.disciplina_id
-)
-SELECT alvo_id, substituta_id, 'oficial' AS origem, 1.0 AS confianca,
-       'equivalente' AS veredito
-FROM oficiais
-UNION ALL
-SELECT ej.disciplina_a, ej.disciplina_b, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
-UNION ALL
-SELECT ej.disciplina_b, ej.disciplina_a, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
-UNION ALL
-SELECT se.disciplina_a, se.disciplina_b, 'heuristica', se.score_final, 'equivalente'
-FROM similaridade_ementa se
-WHERE se.veredito = 'equivalente'
-  AND NOT EXISTS (SELECT 1 FROM oficiais o
-                  WHERE o.alvo_id = se.disciplina_a AND o.substituta_id = se.disciplina_b)
-  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
-                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
-                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a))
-UNION ALL
-SELECT se.disciplina_b, se.disciplina_a, 'heuristica', se.score_final, 'equivalente'
-FROM similaridade_ementa se
-WHERE se.veredito = 'equivalente'
-  AND NOT EXISTS (SELECT 1 FROM oficiais o
-                  WHERE o.alvo_id = se.disciplina_b AND o.substituta_id = se.disciplina_a)
-  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
-                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
-                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a));
+-- `v_equivalencia_efetiva` NÃO é criada aqui: ela depende de
+-- `equivalencia_julgada` e `equivalencia_fechada` e é (re)criada por
+-- `ufsm_speedrun.db.migrar()`, fonte única da definição.
 
 CREATE VIEW IF NOT EXISTS v_disciplina_curriculo AS
 SELECT

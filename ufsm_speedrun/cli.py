@@ -15,7 +15,8 @@ from collections import Counter
 from pathlib import Path
 
 from . import (auditor, config, curriculos, db, dcg, discover, ementas, endpoints,
-               equivalencia, julgamento, publicacao, relacoes, requisitos, validacao)
+               equivalencia, fechamento, julgamento, publicacao, relacoes,
+               requisitos, validacao)
 from .classificacao import classificar as classificar_cursos
 from .http import UfsmClient
 
@@ -318,6 +319,19 @@ def cmd_classificar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fechar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        fechamento.construir(conn, profundidade=args.profundidade)
+        fechamento.relatorio(conn)
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_requisitos(args: argparse.Namespace) -> int:
     if not Path(config.DB_PATH).exists():
         print(f"banco não existe em {config.DB_PATH} — rode: init-db")
@@ -516,6 +530,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("classificar", help="marca cursos ABI/núcleo comum no banco")
     p.set_defaults(func=cmd_classificar)
+
+    p = sub.add_parser("fechar", help="fecha a transitividade das equivalências")
+    p.add_argument("--profundidade", type=int, default=3, help="máximo de saltos (padrão 3)")
+    p.set_defaults(func=cmd_fechar)
 
     p = sub.add_parser("requisitos", help="materializa pré-requisitos de período e carga horária")
     p.set_defaults(func=cmd_requisitos)
