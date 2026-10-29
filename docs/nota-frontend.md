@@ -127,7 +127,58 @@ Impacto medido no auditor: rota **4.991 → 5.152 disciplinas**, 301.480 → 311
 
 Se for implementar só uma coisa desta lista, é essa.
 
-## 6. Um detalhe de modelagem para vocês decidirem
+## 6. Artefatos publicados (núcleo + ementas sob demanda)
+
+`python -m ufsm_speedrun publicar` gera em `data/public/`:
+
+| arquivo | tamanho | quando baixar |
+|---|---|---|
+| `ufsm-web.db.gz` | **2,1 MB** | no boot |
+| `ementas.db.gz` | **4,1 MB** | no primeiro clique numa cadeira |
+| `manifest.json` | — | metadados (tamanhos, contagens) |
+
+O núcleo **não tem texto de ementa** (`programa_texto` é `NULL`) e não tem as
+tabelas de ETL (`rota_*`, `ingest_run`). Do palpite heurístico sobraram só os
+4.829 `equivalente` — a banda de revisão (19 MB) ficou de fora.
+
+### Como carregar a ementa
+
+```ts
+import { inflate } from 'pako'   // ~45 KB
+
+let ementas: SQL.Database | null = null
+
+async function carregarEmentas() {
+  if (ementas) return ementas
+  const gz = await fetch('/ementas.db.gz').then(r => r.arrayBuffer())
+  ementas = new SQL.Database(inflate(new Uint8Array(gz)))
+  return ementas
+}
+
+async function ementaDe(disciplinaId: number) {
+  const db = await carregarEmentas()
+  const [res] = db.exec(
+    'SELECT programa, objetivos_html, bibliografia FROM ementa WHERE disciplina_id = ?',
+    [disciplinaId],
+  )
+  if (!res) return null
+  const [programa, objetivos, bibliografia] = res.values[0]
+  return { programa, objetivos, bibliografia }   // bibliografia pode ser null
+}
+```
+
+Detalhes:
+- carregue **uma vez** e guarde em memória (não re-baixe por clique)
+- `bibliografia` só vem se publicarmos com `--com-bibliografia` (hoje vem `NULL`)
+- o `ufsm-web.db` **não** tem esses campos — não tente `SELECT programa_texto` nele
+
+### Atalho: não precisa de dois bancos no boot
+
+Se preferir simplicidade, da para checar `manifest.json` e só habilitar o botão
+"ver ementa" quando o arquivo existir. Mas os dois bancos são independentes:
+quem nunca clicar nunca baixa os 4,1 MB.
+
+## 7. Um detalhe de modelagem para vocês decidirem
 `makeDone` + `scoreCourse` permitem que horas abertas do curso-base cubram
 **qualquer** obrigatória do alvo (DCG estratégica). A regra é generosa — pela
 contagem, `Música - Bacharelado` sai a 810 h de Ciência da Computação.

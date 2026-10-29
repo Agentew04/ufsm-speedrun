@@ -15,7 +15,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import (auditor, config, curriculos, db, dcg, discover, ementas, endpoints,
-               equivalencia, julgamento, relacoes, validacao)
+               equivalencia, julgamento, publicacao, relacoes, validacao)
 from .classificacao import classificar as classificar_cursos
 from .http import UfsmClient
 
@@ -359,6 +359,19 @@ def cmd_auditar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_publicar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    publicacao.publicar(
+        destino_dir=Path(args.dir) if args.dir else None,
+        comprimir=not args.sem_gzip,
+        com_bibliografia=args.com_bibliografia,
+    )
+    print()
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -504,6 +517,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--front", default=None,
                    help="JSON exportado pelo front para comparar as duas implementações")
     p.set_defaults(func=cmd_auditar)
+
+    p = sub.add_parser("publicar", help="gera os artefatos do front (núcleo + ementas separadas)")
+    p.add_argument("--dir", default=None, help="pasta de saída (padrão: data/public)")
+    p.add_argument("--sem-gzip", action="store_true", help="não gerar os .gz")
+    p.add_argument("--com-bibliografia", action="store_true",
+                   help="incluir bibliografia no ementas.db (quase dobra o tamanho)")
+    p.set_defaults(func=cmd_publicar)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)

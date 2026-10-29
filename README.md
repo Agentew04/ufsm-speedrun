@@ -43,9 +43,26 @@ python -m venv .venv
 # ou o pipeline inteiro de uma vez
 .\.venv\Scripts\python.exe -m ufsm_speedrun tudo
 
+# gera os artefatos que o front consome (data/public/)
+.\.venv\Scripts\python.exe -m ufsm_speedrun publicar
+
 # o que já foi coletado
 .\.venv\Scripts\python.exe -m ufsm_speedrun stats
 ```
+
+## Artefatos para o front
+
+`publicar` compacta o banco de trabalho (VACUUM) e separa o que é pesado:
+
+| arquivo | tamanho | quando carrega |
+|---|---|---|
+| `ufsm-web.db.gz` | 2,1 MB | no boot |
+| `ementas.db.gz` | 4,1 MB | no primeiro clique numa cadeira |
+
+O texto de ementa (25 MB) não vai no núcleo. Contrato de consumo em
+[docs/nota-frontend.md §6](docs/nota-frontend.md).
+
+Backlog do que falta em [docs/futuro.md](docs/futuro.md).
 
 ## Como os dados são guardados
 
