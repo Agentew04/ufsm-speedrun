@@ -170,8 +170,12 @@ diferente e a nota no painel. Usada em dois lugares: cobertura de obrigatórias
   top 36 por grau).
 - `web/src/components/*` — DbGate, BasePanel, Ranking, CourseDetail, Graph,
   Matrix, Metodo.
-- Estado da URL: `#b=<curso>&t=<alvo>&a=<aba>` (compartilhável).
+- Estado da URL: `#b=<curso>&t=<alvo>&a=<aba>&c=1` (compartilhável).
 - `?db=<url>` escolhe outro banco.
+- **Campus**: o toggle "só meu campus (+ EaD)" filtra os alvos (ranking/rede/run)
+  e restringe as disciplinas de cota às ofertadas no campus do curso-base —
+  proxy: campi dos currículos que listam a disciplina (`Universe.discCampus`).
+  Base CC/Santa Maria: 125 alvos, 3.883 cadeiras, 237.010 h no run do front.
 
 ## 6. Limites conhecidos (e o que fazer depois)
 
@@ -185,6 +189,7 @@ diferente e a nota no painel. Usada em dois lugares: cobertura de obrigatórias
 | ABI/núcleo comum | ranking mentia (Artes Cênicas 960 h) | marcados e excluídos do ranking (§8.2) |
 | núcleo flexível sem cota | curso parecia mais barato | cota residual contra `ch_total` (§8.3) |
 | DCG tratada como "qualquer disciplina" | TCC/música contavam em qualquer curso | menu `dcg_elegivel` + terminais + escolha estratégica (§8.5) |
+| disciplina de outro campus | plano impossível na prática | toggle "só meu campus (+ EaD)" (§5) |
 | oferta de turma/horário não modelada | semestres otimistas | integrar horários (não existe no SIE público) |
 | cota restrita usa só o menu do núcleo | pode subestimar equivalência aprovada caso a caso | revisão humana da Fase 6a |
 

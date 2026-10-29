@@ -125,6 +125,8 @@ export interface Universe {
   disciplinas: Map<number, Disciplina>
   /** disciplina -> cursos que a listam */
   cursosByDisc: Map<number, number[]>
+  /** disciplina -> campi onde aparece em algum currículo (proxy de oferta) */
+  discCampus: Map<number, Set<string>>
   /** TCC/TCG/estágio/monografia: nunca contam como DCG de outro curso */
   terminais: Set<number>
   meta: {

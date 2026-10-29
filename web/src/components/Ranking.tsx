@@ -12,13 +12,14 @@ interface Props {
   onSelect: (id: number) => void
   selecionado: number | null
   onDisc: (id: number) => void
+  campusMesmo: boolean
 }
 
 type Ordem = 'semestres' | 'ch' | 'disciplinas' | 'aproveitamento' | 'nome'
 
 const CAMPUS_ORDEM = (a: string, b: string) => a.localeCompare(b, 'pt-BR')
 
-export function Ranking({ universo, baseId, scores, done, onSelect, selecionado, onDisc }: Props) {
+export function Ranking({ universo, baseId, scores, done, onSelect, selecionado, onDisc, campusMesmo }: Props) {
   const [busca, setBusca] = useState('')
   const [campus, setCampus] = useState('todos')
   const [modalidade, setModalidade] = useState('todos')
@@ -37,7 +38,15 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado,
 
   const filtrados = useMemo(() => {
     const termo = norm(busca.trim())
-    let list = scores.filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum)
+    let list = scores.filter(
+      (s) =>
+        s.target.curso.id !== baseId &&
+        !s.target.curso.nucleoComum &&
+        (!campusMesmo ||
+          !base?.curso.campus ||
+          s.target.curso.campus === base.curso.campus ||
+          s.target.curso.campus === 'EaD'),
+    )
     if (termo) {
       list = list.filter((s) =>
         norm(`${s.target.curso.nome} ${s.target.curso.campus ?? ''} ${s.target.curso.grau ?? ''}`).includes(termo),
@@ -63,11 +72,20 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado,
       }
     })
     return ordenado
-  }, [scores, baseId, busca, campus, modalidade, ordem, soCurto])
+  }, [scores, baseId, busca, campus, modalidade, ordem, soCurto, campusMesmo, base])
 
   const semBase = useMemo(
-    () => scores.filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum),
-    [scores, baseId],
+    () =>
+      scores.filter(
+        (s) =>
+          s.target.curso.id !== baseId &&
+          !s.target.curso.nucleoComum &&
+          (!campusMesmo ||
+            !base?.curso.campus ||
+            s.target.curso.campus === base.curso.campus ||
+            s.target.curso.campus === 'EaD'),
+      ),
+    [scores, baseId, campusMesmo, base],
   )
   const resumo = useMemo(() => distanciaResumo(semBase), [semBase])
   const levers = useMemo(() => (done.ids.size ? leverInsights(universo, done, 10) : []), [universo, done])

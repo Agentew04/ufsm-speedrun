@@ -90,6 +90,11 @@ export function Metodo({ universo }: { universo: Universe }) {
               <b>Nada disso é grade oficial.</b> É uma estimativa explicável para comparar cursos.
             </li>
             <li>
+              <b>Campus:</b> o filtro "só meu campus (+ EaD)" esconde cursos de outros campi
+              (ranking/rede/run) e restringe as disciplinas de cota às ofertadas ali (proxy: campi
+              dos currículos que listam a disciplina). O Mapa continua global.
+            </li>
+            <li>
               <b>ABI/núcleo comum</b> (ex.: "Artes Cênicas - Bacharelado", 960 h / 3 semestres) é a
               entrada, não o diploma — o curso continua na habilitação (Direção/Interpretação,
               2.756 h). Esses currículos ficam fora do ranking; aparecem só se você for aluno deles.

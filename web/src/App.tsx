@@ -35,6 +35,7 @@ function lerHash() {
     base: Number.isFinite(b) && b > 0 ? b : null,
     alvo: Number.isFinite(t) && t > 0 ? t : null,
     aba: a && ABAS.some((x) => x.id === a) ? a : null,
+    campus: h.get('c') === '1',
   }
 }
 
@@ -52,6 +53,7 @@ export default function App() {
   const [overrides, setOverrides] = useState<Map<number, boolean>>(new Map())
   const [extras, setExtras] = useState<Set<number>>(new Set())
   const [estrategica, setEstrategica] = useState(true)
+  const [campusMesmo, setCampusMesmo] = useState(inicial.campus)
   const [alvosRede, setAlvosRede] = useState(8)
   const [discAberto, setDiscAberto] = useState<number | null>(null)
   const [redeOrdem, setRedeOrdem] = useState<'aproveitamento' | 'baratos'>('aproveitamento')
@@ -85,10 +87,20 @@ export default function App() {
     [universo, base, progressoDeferido, overrides, extras],
   )
 
+  // disciplinas ofertadas no campus do curso-base (+ EaD) — política "mesmo"
+  const disponiveis = useMemo(() => {
+    if (!universo || !campusMesmo || !base?.curso.campus) return undefined
+    const set = new Set<number>()
+    for (const [id, campi] of universo.discCampus) {
+      if (campi.has(base.curso.campus) || campi.has('EaD')) set.add(id)
+    }
+    return set
+  }, [universo, campusMesmo, base])
+
   const scores = useMemo(() => {
     if (!universo || !base || !done) return []
-    return rankCourses(universo, done, { estrategica })
-  }, [universo, base, done, estrategica])
+    return rankCourses(universo, done, { estrategica, disponiveis })
+  }, [universo, base, done, estrategica, disponiveis])
 
   const scoreAlvo = useMemo(() => {
     if (!universo || !alvo || !done) return null
@@ -119,9 +131,10 @@ export default function App() {
     if (baseId) params.set('b', String(baseId))
     if (alvoId) params.set('t', String(alvoId))
     if (aba) params.set('a', aba)
+    if (campusMesmo) params.set('c', '1')
     const hash = params.toString()
     history.replaceState(null, '', hash ? `#${hash}` : location.pathname + location.search)
-  }, [baseId, alvoId, aba])
+  }, [baseId, alvoId, aba, campusMesmo])
 
   const toggleDisc = useCallback((id: number, valor: boolean) => {
     setOverrides((prev) => {
@@ -146,7 +159,13 @@ export default function App() {
   const redeData = useMemo(() => {
     if (!universo || !base || !done) return { elements: [], discTotal: 0, discMostrados: 0 }
     const candidatos = scores.filter(
-      (s) => s.target.curso.id !== base.curso.id && !s.target.curso.nucleoComum,
+      (s) =>
+        s.target.curso.id !== base.curso.id &&
+        !s.target.curso.nucleoComum &&
+        (!campusMesmo ||
+          !base.curso.campus ||
+          s.target.curso.campus === base.curso.campus ||
+          s.target.curso.campus === 'EaD'),
     )
     const ordenados =
       redeOrdem === 'aproveitamento'
@@ -154,7 +173,7 @@ export default function App() {
         : candidatos
     const alvos = ordenados.slice(0, alvosRede).map((s) => s.target)
     return buildNetwork(universo, { base, alvos, done })
-  }, [universo, base, done, scores, alvosRede, redeOrdem])
+  }, [universo, base, done, scores, alvosRede, redeOrdem, campusMesmo])
 
   if (!universo || !done) {
     return <DbGate onBytes={onBytes} status={status} mensagem={mensagem} />
@@ -164,13 +183,28 @@ export default function App() {
   if (new URLSearchParams(location.search).has('diag') && base) {
     return (
       <pre id="diag" style={{ whiteSpace: 'pre-wrap', padding: 16, fontSize: 11 }}>
-        {JSON.stringify(buildDiagnostico(universo, base, done, estrategica), null, 2)}
+        {JSON.stringify(
+          buildDiagnostico(universo, base, done, estrategica, {
+            mesmoCampus: campusMesmo,
+            disponiveis,
+          }),
+          null,
+          2,
+        )}
       </pre>
     )
   }
 
   const melhores = scores
-    .filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum)
+    .filter(
+      (s) =>
+        s.target.curso.id !== baseId &&
+        !s.target.curso.nucleoComum &&
+        (!campusMesmo ||
+          !base?.curso.campus ||
+          s.target.curso.campus === base.curso.campus ||
+          s.target.curso.campus === 'EaD'),
+    )
     .slice(0, 3)
 
   return (
@@ -222,6 +256,8 @@ export default function App() {
             done={done}
             estrategica={estrategica}
             setEstrategica={setEstrategica}
+            campusMesmo={campusMesmo}
+            setCampusMesmo={setCampusMesmo}
           />
 
           {base && melhores.length > 0 && (
@@ -277,6 +313,7 @@ export default function App() {
               onSelect={escolherAlvo}
               selecionado={alvoId}
               onDisc={setDiscAberto}
+              campusMesmo={campusMesmo}
             />
           )}
 
@@ -307,6 +344,8 @@ export default function App() {
               base={base}
               done={done}
               estrategica={estrategica}
+              mesmoCampus={campusMesmo}
+              disponiveis={disponiveis}
               onOpenCurso={escolherAlvo}
             />
           )}

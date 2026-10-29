@@ -74,6 +74,7 @@ function margem(
   cursosDe: (id: number) => number,
   menu: Map<number, number>,
   menuHoras: number,
+  disponiveis?: Set<number>,
 ): Margem {
   let coveredCh = 0
   const missing: Oferta[] = []
@@ -169,6 +170,7 @@ function margem(
       for (const cand of q.candidatos) {
         if (coberto >= q.horas) break
         if (!pool.has(cand)) continue
+        if (disponiveis && !disponiveis.has(cand)) continue
         const ch = chDe(universo, cand)
         coberto += ch
         surplus = Math.max(0, surplus - ch)
@@ -184,7 +186,9 @@ function margem(
 
     if (menuFechado && q.candidatos.length) {
       const cands = q.candidatos
-        .filter((c) => !pool.has(c) && !picks.has(c))
+        .filter(
+          (c) => !pool.has(c) && !picks.has(c) && (!disponiveis || disponiveis.has(c)),
+        )
         .sort((a, b) => cursosDe(b) - cursosDe(a) || chDe(universo, b) - chDe(universo, a))
       for (const cand of cands) {
         if (falta <= 0) break
@@ -219,7 +223,14 @@ function margem(
  * A união final (e portanto o total de cadeiras) não depende da ordem — o que
  * a ordem muda é o quão cedo cada curso fecha.
  */
-export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
+export function buildSpeedrun(
+  universo: Universe,
+  done: Done,
+  base: CourseModel | null,
+  opcoes?: { mesmoCampus?: boolean; disponiveis?: Set<number> },
+): Speedrun {
+  const mesmoCampus = opcoes?.mesmoCampus ?? false
+  const disponiveis = opcoes?.disponiveis
   const pool = new Set<number>(done.ids)
   let poolCh = 0
   for (const ch of done.chOf.values()) poolCh += ch
@@ -246,7 +257,16 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   const dcgEscolhas: { discId: number; codigo: string; nome: string; ch: number }[] = []
 
   const restantes = new Set<number>(
-    cursos.filter((c) => !c.curso.nucleoComum).map((c) => c.curso.id),
+    cursos
+      .filter(
+        (c) =>
+          !c.curso.nucleoComum &&
+          (!mesmoCampus ||
+            !base?.curso.campus ||
+            c.curso.campus === base.curso.campus ||
+            c.curso.campus === 'EaD'),
+      )
+      .map((c) => c.curso.id),
   )
   const porId = new Map(cursos.map((c) => [c.curso.id, c]))
   const passos: RouteStep[] = []
@@ -260,7 +280,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     for (const id of restantes) {
       const target = porId.get(id)
       if (!target) continue
-      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, done, cursosDe, menu, menuHoras)
+      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, done, cursosDe, menu, menuHoras, disponiveis)
       const chave = m.horas + m.missing.length * 1e-3 + target.curso.id * 1e-9
       if (chave < melhorChave) {
         melhorChave = chave

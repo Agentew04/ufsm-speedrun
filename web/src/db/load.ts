@@ -403,6 +403,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
   }
 
   const cursosByDisc = new Map<number, number[]>()
+  const discCampus = new Map<number, Set<string>>()
   for (const m of models) {
     for (const oferta of m.ofertas) {
       const list = cursosByDisc.get(oferta.discId)
@@ -410,6 +411,12 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
         if (list[list.length - 1] !== m.curso.id) list.push(m.curso.id)
       } else {
         cursosByDisc.set(oferta.discId, [m.curso.id])
+      }
+      const campus = m.curso.campus
+      if (campus) {
+        const set = discCampus.get(oferta.discId) ?? new Set<string>()
+        set.add(campus)
+        discCampus.set(oferta.discId, set)
       }
     }
   }
@@ -419,6 +426,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     byCurso: new Map(models.map((m) => [m.curso.id, m])),
     disciplinas: discById,
     cursosByDisc,
+    discCampus,
     terminais,
     meta: {
       cursos: num(meta.cursos),

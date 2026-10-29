@@ -20,6 +20,8 @@ interface Props {
   done: Done
   estrategica: boolean
   setEstrategica: (v: boolean) => void
+  campusMesmo: boolean
+  setCampusMesmo: (v: boolean) => void
 }
 
 export function BasePanel({
@@ -38,6 +40,8 @@ export function BasePanel({
   done,
   estrategica,
   setEstrategica,
+  campusMesmo,
+  setCampusMesmo,
 }: Props) {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
@@ -117,6 +121,20 @@ export function BasePanel({
               habilitação. O cálculo funciona, mas a CH do curso é só a entrada.
             </p>
           )}
+
+          <div className="divider" />
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={campusMesmo}
+              onChange={(e) => setCampusMesmo(e.target.checked)}
+            />
+            só meu campus (+ EaD)
+          </label>
+          <p className="hint tiny">
+            Esconde cursos de outros campi no ranking/rede/run e restringe as cotas às disciplinas
+            ofertadas em {base.curso.campus ?? 'seu campus'}. O Mapa continua global.
+          </p>
 
           <div className="divider" />
 

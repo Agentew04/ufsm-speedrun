@@ -10,19 +10,33 @@ interface Props {
   base: CourseModel | null
   done: Done
   estrategica: boolean
+  mesmoCampus: boolean
+  disponiveis?: Set<number>
   onOpenCurso: (id: number) => void
 }
 
-export function SpeedrunView({ universo, base, done, estrategica, onOpenCurso }: Props) {
+export function SpeedrunView({
+  universo,
+  base,
+  done,
+  estrategica,
+  mesmoCampus,
+  disponiveis,
+  onOpenCurso,
+}: Props) {
   const [busca, setBusca] = useState('')
   const dados = useMemo(
-    () => (base ? buildSpeedrun(universo, done) : null),
-    [universo, base, done],
+    () =>
+      base ? buildSpeedrun(universo, done, base, { mesmoCampus, disponiveis }) : null,
+    [universo, base, done, mesmoCampus, disponiveis],
   )
 
   const exportarDiagnostico = () => {
     if (!base || !dados) return
-    const payload = buildDiagnostico(universo, base, done, estrategica)
+    const payload = buildDiagnostico(universo, base, done, estrategica, {
+      mesmoCampus,
+      disponiveis,
+    })
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -77,7 +91,11 @@ export function SpeedrunView({ universo, base, done, estrategica, onOpenCurso }:
         <div className="row-between">
           <div>
             <span className="eyebrow">run completo · {base.curso.nome}</span>
-            <h2>Fechar os 148 cursos, na melhor ordem</h2>
+            <h2>
+              {mesmoCampus
+                ? `Fechar os ${dados.passos.filter((p) => p.curso.curso.id !== base.curso.id).length} cursos do seu campus`
+                : 'Fechar todos os cursos, na melhor ordem'}
+            </h2>
           </div>
           <button
             type="button"

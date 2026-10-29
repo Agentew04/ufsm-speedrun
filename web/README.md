@@ -51,6 +51,9 @@ disciplina**: CH, créditos, departamento e a ementa. O texto vem de
 `ementas.db.gz`, baixado só no primeiro clique; a **bibliografia** é um bloco
 que baixa `bibliografias.db.gz` só quando você expande.
 
+O toggle **"só meu campus (+ EaD)"** esconde cursos de outros campi e restringe
+as cotas às disciplinas ofertadas no seu campus.
+
 O checklist da barra lateral deixa ajustar o que já foi cumprido: semestre
 atual, disciplinas individuais e cadeiras feitas em outro curso/instituição.
 O interruptor **DCG estratégica** (só aparece quando o curso tem cota de DCG

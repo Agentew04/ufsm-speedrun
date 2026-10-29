@@ -175,11 +175,12 @@ export function prereqSatisfied(target: CourseModel, discId: number, disponiveis
 export function scoreCourse(
   target: CourseModel,
   done: Done,
-  opcoes?: { agenda?: boolean; leve?: boolean; estrategica?: boolean },
+  opcoes?: { agenda?: boolean; leve?: boolean; estrategica?: boolean; disponiveis?: Set<number> },
 ): CourseScore {
   const agenda = opcoes?.agenda ?? true
   const leve = opcoes?.leve ?? false
   const estrategica = opcoes?.estrategica ?? true
+  const disponiveis = opcoes?.disponiveis
   const fixedCovered: Oferta[] = []
   const fixedEquiv: Oferta[] = []
   const fixedEquivParcial: Oferta[] = []
@@ -296,6 +297,7 @@ export function scoreCourse(
       for (const cand of q.candidatos) {
         if (coberto >= q.horas) break
         if (!done.ids.has(cand)) continue
+        if (disponiveis && !disponiveis.has(cand)) continue
         const ch = done.chOf.get(cand) ?? 0
         coberto += ch
         surplus = Math.max(0, surplus - ch)
@@ -316,6 +318,7 @@ export function scoreCourse(
       for (const cand of q.candidatos) {
         if (restante <= 0) break
         if (done.ids.has(cand)) continue
+        if (disponiveis && !disponiveis.has(cand)) continue
         const d = target.byDisc.get(cand)
         if (!d) continue
         sugestoes.push({ discId: cand, codigo: d.codigo, nome: d.nome, ch: d.ch })
@@ -577,10 +580,16 @@ export function planSemesters(target: CourseModel, itens: SemesterItem[], done: 
 export function rankCourses(
   universo: Universe,
   done: Done,
-  opcoes?: { agenda?: boolean; estrategica?: boolean },
+  opcoes?: { agenda?: boolean; estrategica?: boolean; disponiveis?: Set<number> },
 ): CourseScore[] {
   return universo.cursos
-    .map((c) => scoreCourse(c, done, { agenda: opcoes?.agenda ?? true, estrategica: opcoes?.estrategica }))
+    .map((c) =>
+      scoreCourse(c, done, {
+        agenda: opcoes?.agenda ?? true,
+        estrategica: opcoes?.estrategica,
+        disponiveis: opcoes?.disponiveis,
+      }),
+    )
     .sort((a, b) => a.semestres - b.semestres || a.extraHoras - b.extraHoras || a.extraDisciplinas - b.extraDisciplinas)
 }
 
