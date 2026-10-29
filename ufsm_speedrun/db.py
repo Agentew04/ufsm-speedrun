@@ -43,24 +43,42 @@ def connect(db_path: Path = config.DB_PATH) -> sqlite3.Connection:
 VIEW_EQUIVALENCIA = """
 DROP VIEW IF EXISTS v_equivalencia_efetiva;
 CREATE VIEW v_equivalencia_efetiva AS
-SELECT dc.disciplina_id  AS alvo_id,
-       ei.disciplina_req_id AS substituta_id,
-       'oficial'         AS origem,
-       1.0               AS confianca,
-       'equivalente'     AS veredito
-FROM equivalencia_item ei
-JOIN equivalencia_bloco eb      ON eb.id = ei.bloco_id
-JOIN disciplina_curriculo dc    ON dc.id = eb.disciplina_curriculo_id
-WHERE ei.disciplina_req_id IS NOT NULL
-  AND ei.disciplina_req_id <> dc.disciplina_id
+WITH oficiais AS (
+    SELECT dc.disciplina_id AS alvo_id, ei.disciplina_req_id AS substituta_id
+    FROM equivalencia_item ei
+    JOIN equivalencia_bloco eb   ON eb.id = ei.bloco_id
+    JOIN disciplina_curriculo dc ON dc.id = eb.disciplina_curriculo_id
+    WHERE ei.disciplina_req_id IS NOT NULL
+      AND ei.disciplina_req_id <> dc.disciplina_id
+)
+SELECT alvo_id, substituta_id, 'oficial' AS origem, 1.0 AS confianca,
+       'equivalente' AS veredito
+FROM oficiais
 UNION ALL
 SELECT ej.disciplina_a, ej.disciplina_b, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej
-WHERE ej.veredito IN ('equivalente', 'parcial')
+FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
 UNION ALL
 SELECT ej.disciplina_b, ej.disciplina_a, 'julgada', ej.confianca, ej.veredito
-FROM equivalencia_julgada ej
-WHERE ej.veredito IN ('equivalente', 'parcial');
+FROM equivalencia_julgada ej WHERE ej.veredito IN ('equivalente', 'parcial')
+UNION ALL
+-- palpite heurístico forte (nunca julgado): entra como 'heuristica', simétrico
+SELECT se.disciplina_a, se.disciplina_b, 'heuristica', se.score_final, 'equivalente'
+FROM similaridade_ementa se
+WHERE se.veredito = 'equivalente'
+  AND NOT EXISTS (SELECT 1 FROM oficiais o
+                  WHERE o.alvo_id = se.disciplina_a AND o.substituta_id = se.disciplina_b)
+  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
+                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
+                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a))
+UNION ALL
+SELECT se.disciplina_b, se.disciplina_a, 'heuristica', se.score_final, 'equivalente'
+FROM similaridade_ementa se
+WHERE se.veredito = 'equivalente'
+  AND NOT EXISTS (SELECT 1 FROM oficiais o
+                  WHERE o.alvo_id = se.disciplina_b AND o.substituta_id = se.disciplina_a)
+  AND NOT EXISTS (SELECT 1 FROM equivalencia_julgada ej
+                  WHERE (ej.disciplina_a = se.disciplina_a AND ej.disciplina_b = se.disciplina_b)
+                     OR (ej.disciplina_a = se.disciplina_b AND ej.disciplina_b = se.disciplina_a));
 """
 
 

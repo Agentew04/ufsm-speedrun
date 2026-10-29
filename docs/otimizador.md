@@ -173,12 +173,17 @@ não impediria nada que o menu já não impeça.
 
 | política | disciplinas na rota | horas |
 |---|---|---|
-| `aberta` (atual do front) | 4.991 | 301.480 |
-| `menu` + terminais excluídas | **5.152** | **311.260** |
+| `aberta` (curinga) | 4.509 | 273.405 |
+| `menu` (fechado + escolha estratégica) | **4.684** | **282.780** |
 
-**+161 disciplinas e +9.780 h (+3,2%)**. Por curso, o efeito é o bloco de DCG
-deixar de ser curinga: `Música - Bacharelado` sai de 810 h para 1.290 h de
-Ciência da Computação; `Sistemas de Informação`, de 900 h para 1.380 h.
+O menu fechado custa **+175 disciplinas** em relação ao curinga — é o preço de não
+poder inventar. Mas o número absoluto caiu muito nos dois lados depois que a view
+passou a expor as 4.829 equivalências heurísticas (antes 4.981 → agora 4.509 no
+modo aberto).
+
+O que **não** pode faltar junto com o menu é a escolha estratégica (ver
+`docs/nota-frontend.md §5`): sem ela, fechar o menu derruba o aproveitamento de
+DCG entre cursos a zero.
 
 ### Implementado
 

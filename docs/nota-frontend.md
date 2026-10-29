@@ -126,6 +126,79 @@ Impacto medido no auditor: rota **4.991 → 5.152 disciplinas**, 301.480 → 311
 
 Se for implementar só uma coisa desta lista, é essa.
 
+### O menu é escolha estratégica, não só cota
+
+Fechar o menu resolveu o abuso ("TCC de SI como DCG de CC"), mas derrubou um caso
+legítimo — e a causa não era a restrição:
+
+> `ELC1070 GERÊNCIA DE PROJETOS DE SOFTWARE` é DCG do CC.
+> `UFSM01299 GERÊNCIA DE PROJETOS` é **obrigatória** do SI.
+> O SIE declara oficialmente que uma dispensa a outra (`SI ← CC`, direção certa).
+
+O problema é que **o modelo nunca "cursa" itens do menu** — ele trata a cota como
+horas a preencher. Assim a equivalência existia no banco, mas `done.ids` nunca
+continha `ELC1070`, e nada acontecia.
+
+Antes da restrição isso "funcionava" pelo motivo errado: a cota aberta era um
+curinga que cobria qualquer obrigatória.
+
+**Correção:** a cota de DCG com menu vira um conjunto de **escolhas** que o solver
+faz para maximizar valor no curso-alvo.
+
+```ts
+// em makeDone(base): guarde o menu e o orçamento
+done.menu = new Map<number, number>()   // discId -> CH
+done.menuHoras = 0
+for (const q of base.quotas) {
+  if (q.kind !== 'dcg' || !q.candidatos.length) continue
+  done.menuHoras += q.horas
+  for (const d of q.candidatos) done.menu.set(d, chDe(universo, d))
+}
+
+// em scoreCourse(target): cubra obrigatórias cujo substituto está no menu
+let orcamento = done.menuHoras
+for (const o of faltantesOrdenadasPorCH) {
+  const subs = new Set([o.discId, ...(target.equivals.get(o.discId) ?? []).map(e => e.discId)])
+  const escolha = [...done.menu.keys()]
+    .filter(m => subs.has(m) && done.menu.get(m)! <= orcamento)
+    .sort((a, b) => done.menu.get(a)! - done.menu.get(b)!)[0]
+  if (escolha === undefined) continue
+  orcamento -= done.menu.get(escolha)!
+  cobrir(o, escolha)      // entra em fixedDcg, consumindo o orçamento
+}
+```
+
+Resultado medido (base CC → alvo SI):
+
+| | antes | agora |
+|---|---|---|
+| obrigatórias faltando | 21 | **8** |
+| semestres estimados | 3 | **1** |
+| dispensadas por DCG | 0 | **8** |
+
+E as escolhas são exatamente as esperadas:
+
+```
+CAD1002 TEORIA GERAL DA ADMINISTRAÇÃO   -> CAD1137 ORGANIZAÇÃO E ADMINISTRAÇÃO
+CIE1002 TEORIA ECONÔMICA                -> UFSM01309 INTRODUÇÃO À ECONOMIA
+ELC1070 GERÊNCIA DE PROJETOS DE SOFTWARE -> UFSM01299 GERÊNCIA DE PROJETOS
+ELC1072 INTERFACE HUMANO-COMPUTADOR      -> UFSM01297 INTERAÇÃO HUMANO-COMPUTADOR
+```
+
+> ⚠️ O `orcamento` é consumido: uma vez escolhido `ELC1070` para o SI, aquelas
+> 60 h não estão mais disponíveis para outro alvo. No guloso, isso precisa ser
+> estado mutável entre passos (como já é `livreAberto`).
+
+### E a heurística agora conta
+
+`v_equivalencia_efetiva` passou a incluir os pares `veredito = 'equivalente'` da
+heurística (4.829 pares, 8.435 direções) com `origem = 'heuristica'` e
+`confianca = score_final`. Antes eles ficavam invisíveis: nunca foram julgados e
+não entravam na view.
+
+Sugestão de UI: `oficial` e `julgada` com selo normal; `heuristica` com selo
+"sugestão (0,91)" — é palpite de texto, não decisão de colegiado.
+
 ## 6. Requisitos de período e de carga horária
 
 O SIE registra dois tipos de condição que o plano semestral ignorava:

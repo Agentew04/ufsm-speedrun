@@ -94,6 +94,9 @@ class Done:
     free_horas: int
     free_aberto: int
     ch_of: dict[int, int]
+    # disciplinas do menu de DCG do curso-base: (disc_id -> CH) e orçamento de horas
+    menu: dict[int, int] = field(default_factory=dict)
+    menu_horas: int = 0
 
 
 # ----------------------------------------------------------------- carregar
@@ -340,6 +343,8 @@ def make_done(curso: Curso, concluido_ate: int | None = None,
         fracao = min(1.0, max(0.0, concluido_ate / curso.semestres))
 
     free_horas = free_aberto = 0
+    menu: dict[int, int] = {}
+    menu_horas = 0
     for q in curso.quotas:
         if q.kind == "atividade":
             continue
@@ -351,7 +356,12 @@ def make_done(curso: Curso, concluido_ate: int | None = None,
         )
         if not q.residual and aberta:
             free_aberto += h
-    return Done(ids, free_horas, free_aberto, ch_of)
+        # o menu é uma escolha estratégica: dá para "cursar" itens dele
+        if q.kind == "dcg" and q.candidatos and dcg == "menu":
+            menu_horas += h
+            for cand in q.candidatos:
+                menu.setdefault(cand, curso.ch_por_disc.get(cand, 0))
+    return Done(ids, free_horas, free_aberto, ch_of, menu, menu_horas)
 
 
 def _prereq_ok(curso: Curso, disc_id: int, disponiveis: set[int]) -> bool:
@@ -388,9 +398,10 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
         else:
             fixed_missing.append(o)
 
-    # DCG estratégica: horas de cota aberta do curso-base cobrem obrigatórias
+    # DCG estratégica por cota aberta: horas livres do curso-base cobrem obrigatórias
     livre = min(done.free_aberto, done.free_horas)
     fixed_dcg = []
+    coberto_livre = 0
     if livre > 0 and fixed_missing:
         disponiveis = set(done.ids)
         restantes = sorted(fixed_missing, key=lambda o: -o.ch)
@@ -401,6 +412,7 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
             for o in restantes:
                 if o.ch <= livre and o.disc_id not in terminais and _prereq_ok(curso, o.disc_id, disponiveis):
                     livre -= o.ch
+                    coberto_livre += o.ch
                     fixed_dcg.append(o)
                     disponiveis.add(o.disc_id)
                     cobrou = True
@@ -409,7 +421,32 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
             restantes = sobra
         fixed_missing = restantes
 
-    surplus = done.free_horas - sum(o.ch for o in fixed_dcg)
+    # DCG estratégica por MENU: "cursar" itens do menu do curso-base que dispensam
+    # obrigatórias do alvo (igualdade ou equivalência). É o que permite
+    # "fiz ELC1070 como DCG do CC e isso dispensa UFSM01299 do SI".
+    orcamento_menu = done.menu_horas
+    menu_usado: list[int] = []
+    gasto_menu = 0
+    if orcamento_menu > 0 and fixed_missing:
+        restantes = []
+        for o in sorted(fixed_missing, key=lambda x: -x.ch):
+            substitutos = set(curso.equivals.get(o.disc_id, [])) | {o.disc_id}
+            candidatos = [
+                m for m in done.menu
+                if m in substitutos and done.menu.get(m, 0) <= orcamento_menu
+            ]
+            if not candidatos:
+                restantes.append(o)
+                continue
+            escolha = min(candidatos, key=lambda m: done.menu.get(m, 0))
+            custo = done.menu.get(escolha, 0)
+            orcamento_menu -= custo
+            gasto_menu += custo
+            menu_usado.append(escolha)
+            fixed_dcg.append(o)
+        fixed_missing = restantes
+
+    surplus = done.free_horas - coberto_livre - gasto_menu
     for did, horas in done.ch_of.items():
         if did in curso.fixed_ids:
             continue
@@ -447,6 +484,8 @@ def score(curso: Curso, done: Done, dcg: str = "aberta",
         "free_need": free_need,
         "fixed_missing": fixed_missing,
         "fixed_dcg": fixed_dcg,
+        "menu_usado": menu_usado,
+        "gasto_menu": gasto_menu,
         "semestres": -(-(missing_ch + free_need) // max(1, curso.carga_semestre)),
     }
 
@@ -468,6 +507,9 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
         for o in c.fixed:
             cursos_de[o.disc_id] = cursos_de.get(o.disc_id, 0) + 1
 
+    menu = dict(done.menu)
+    menu_horas = done.menu_horas
+
     alvos = [c for c in cursos if not c.nucleo_comum and c.id != base.id]
     if mesmo_campus:
         alvos = [c for c in alvos if c.campus in (base.campus, "EaD")]
@@ -479,7 +521,7 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
         melhor_id, melhor, melhor_chave = None, None, float("inf")
         for cid, target in restantes.items():
             m = _margem(target, pool, pool_ch, livre_aberto, livre_fechado, cursos_de,
-                        dcg, terminais, disponiveis)
+                        dcg, terminais, disponiveis, menu, menu_horas)
             chave = m["horas"] + len(m["missing"]) * 1e-3 + cid * 1e-9
             if chave < melhor_chave:
                 melhor_chave, melhor, melhor_id = chave, m, cid
@@ -489,6 +531,12 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
         target = restantes.pop(melhor_id)
 
         livre_aberto -= melhor["livre_usado"]
+        for did in melhor.get("menu_usado", []):
+            custo = menu.get(did, 0)
+            menu_horas -= custo
+            if did not in pool:
+                pool.add(did)
+                pool_ch += custo
         for o in melhor["cobertos"]:
             if o.disc_id not in pool:
                 pool.add(o.disc_id)
@@ -520,9 +568,12 @@ def build_speedrun(cursos: list[Curso], base: Curso, done: Done,
 def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
             livre_fechado: int, cursos_de: dict[int, int],
             dcg: str = "aberta", terminais: set[int] | None = None,
-            disponiveis: set[int] | None = None) -> dict:
+            disponiveis: set[int] | None = None,
+            menu: dict[int, int] | None = None,
+            menu_horas: int = 0) -> dict:
     """Port de margem (web/src/lib/speedrun.ts:59)."""
     terminais = terminais or set()
+    menu = menu or {}
     covered_ch = 0
     missing = []
     for o in target.fixed:
@@ -547,6 +598,30 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
         missing = resto
 
     surplus = livre + livre_fechado + pool_ch - covered_ch
+
+    # menu de DCG do curso-base: cursar itens que dispensam obrigatórias do alvo
+    menu_usado: list[int] = []
+    gasto_menu = 0
+    orcamento = menu_horas
+    if orcamento > 0 and missing:
+        resto = []
+        for o in sorted(missing, key=lambda x: -x.ch):
+            substitutos = set(target.equivals.get(o.disc_id, [])) | {o.disc_id}
+            candidatos = [
+                m for m in menu
+                if m in substitutos and menu.get(m, 0) <= orcamento
+            ]
+            if not candidatos:
+                resto.append(o)
+                continue
+            escolha = min(candidatos, key=lambda m: menu.get(m, 0))
+            custo = menu.get(escolha, 0)
+            orcamento -= custo
+            gasto_menu += custo
+            menu_usado.append(escolha)
+            cobertos.append(o)
+        missing = resto
+    surplus = max(0, surplus - gasto_menu)
     horas = 0
     picks: list[tuple[int, int]] = []
 
@@ -592,7 +667,8 @@ def _margem(target: Curso, pool: set[int], pool_ch: int, livre_aberto: int,
 
     horas += sum(o.ch for o in missing) + sum(ch for _, ch in picks)
     return {"missing": missing, "horas": horas, "picks": picks,
-            "cobertos": cobertos, "livre_usado": livre_aberto - livre}
+            "cobertos": cobertos, "livre_usado": livre_aberto - livre,
+            "menu_usado": menu_usado, "gasto_menu": gasto_menu}
 
 
 # --------------------------------------------------------------- benchmark
