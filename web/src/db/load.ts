@@ -3,6 +3,7 @@ import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import type {
   CourseModel,
   Curso,
+  Disciplina,
   EquivItem,
   Estrutura,
   Oferta,
@@ -183,21 +184,28 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
             (SELECT COUNT(*) FROM disciplina WHERE programa_texto IS NOT NULL) AS com_ementa`,
   )[0] ?? {}
 
-  // índice código -> id (prereq/equiv às vezes só trazem o código)
-  const discById = new Map<number, { id: number; codigo: string; nome: string; ch: number }>()
+  // catálogo completo (inclui disciplina fora das versões selecionadas) —
+  // serve de índice por código e alimenta o modal da cadeira
+  const discRaw = q<Record<string, unknown>>(
+    db,
+    `SELECT id, codigo, nome, ch_total, creditos, departamento_nome, situacao
+       FROM disciplina`,
+  )
+  const discById = new Map<number, Disciplina>()
   const discByCodigo = new Map<string, number>()
-  for (const o of ofertasRaw) {
-    const id = num(o.disciplina_id)
-    if (!discById.has(id)) {
-      const d = {
-        id,
-        codigo: str(o.codigo),
-        nome: str(o.nome),
-        ch: num(o.ch_total),
-      }
-      discById.set(id, d)
-      if (d.codigo) discByCodigo.set(d.codigo, id)
+  for (const d of discRaw) {
+    const id = num(d.id)
+    const item: Disciplina = {
+      id,
+      codigo: str(d.codigo),
+      nome: str(d.nome),
+      ch: num(d.ch_total),
+      creditos: optNum(d.creditos),
+      departamento: optStr(d.departamento_nome),
+      situacao: optStr(d.situacao),
     }
+    discById.set(id, item)
+    if (item.codigo) discByCodigo.set(item.codigo, id)
   }
 
   const versaoByCurso = new Map<number, Versao>()

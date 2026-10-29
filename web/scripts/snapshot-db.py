@@ -60,6 +60,14 @@ def main() -> int:
         shutil.copyfile(gz, dst.parent / f"{dst.name}.gz")
         print(f"     + {dst.name}.gz  ({gz.stat().st_size / 1_048_576:.1f} MB)")
 
+    # conteúdo sob demanda: ementas e bibliografias (não entram no boot)
+    publicados = RAIZ / "data" / "public"
+    for nome in ("ementas.db.gz", "bibliografias.db.gz"):
+        artefato = publicados / nome
+        if artefato.exists():
+            shutil.copyfile(artefato, dst.parent / nome)
+            print(f"     + {nome}  ({artefato.stat().st_size / 1_048_576:.1f} MB)")
+
     check = sqlite3.connect(f"file:{dst.as_posix()}?mode=ro", uri=True)
     try:
         contar = lambda sql: check.execute(sql).fetchone()[0]

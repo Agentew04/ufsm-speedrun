@@ -314,8 +314,8 @@ Para o auditor: vale investigar por que `_margem(1250)` no passo 1 é maior que
 | arquivo | tamanho | quando o front baixa |
 |---|---|---|
 | `ufsm-web.db.gz` | 2,1 MB | boot |
-| `ementas.db.gz` | 4,1 MB | ao abrir a cadeira (não implementado) |
-| `bibliografias.db.gz` | 4,2 MB | ao expandir bibliografia (não implementado) |
+| `ementas.db.gz` | 4,1 MB | no primeiro clique numa cadeira (modal) |
+| `bibliografias.db.gz` | 4,2 MB | ao expandir "bibliografia" no modal |
 | `manifest.json` | — | metadados |
 
 O núcleo tem todas as tabelas do otimizador (`dcg_elegivel`, `eh_terminal`,
@@ -326,3 +326,18 @@ o `.gz` e descomprime com `DecompressionStream` (sem pako), com fallback para
 
 `web/scripts/snapshot-db.py` copia o `.db` e o `.gz` publicados para
 `web/public/` (e cai para `data/ufsm.db` se `data/public/` não existir).
+
+### Modal da cadeira
+
+Clicar numa disciplina (lista do curso, grafo, alavancas) abre um modal
+(`components/DiscModal.tsx`) com CH, créditos, departamento, situação, em
+quantos currículos aparece e se você já a tem. O texto vem de `lib/conteudo.ts`:
+
+- `buscarEmenta(id)` baixa `ementas.db.gz` **uma vez por sessão** (promessa em
+  cache) e consulta `ementa(disciplina_id, programa, objetivos_html)`;
+- `buscarBibliografia(id)` faz o mesmo com `bibliografias.db.gz`, **só quando o
+  bloco é expandido**;
+- o texto passa por `htmlParaTexto` (tags fora, quebras no meio de palavra
+  remendadas, rótulo "EMENTA"/"BIBLIOGRAFIA" duplicado removido);
+- se o arquivo não estiver ao lado da página, o modal mostra o erro sem quebrar
+  a UI ("rode publicar e copie os artefatos").

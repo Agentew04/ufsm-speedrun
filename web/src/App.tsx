@@ -11,6 +11,7 @@ import { NetworkGraph } from './components/Graph'
 import { Matrix } from './components/Matrix'
 import { Metodo } from './components/Metodo'
 import { SpeedrunView } from './components/Speedrun'
+import { DiscModal } from './components/DiscModal'
 import { buildDiagnostico } from './lib/diag'
 import { num } from './lib/format'
 
@@ -52,6 +53,7 @@ export default function App() {
   const [extras, setExtras] = useState<Set<number>>(new Set())
   const [estrategica, setEstrategica] = useState(true)
   const [alvosRede, setAlvosRede] = useState(8)
+  const [discAberto, setDiscAberto] = useState<number | null>(null)
   const [redeOrdem, setRedeOrdem] = useState<'aproveitamento' | 'baratos'>('aproveitamento')
 
   const onBytes = useCallback(async (bytes: ArrayBuffer) => {
@@ -109,6 +111,8 @@ export default function App() {
     setAlvoId(id)
     setAba('curso')
   }, [])
+
+  const fecharDisc = useCallback(() => setDiscAberto(null), [])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -272,12 +276,20 @@ export default function App() {
               done={done}
               onSelect={escolherAlvo}
               selecionado={alvoId}
+              onDisc={setDiscAberto}
             />
           )}
 
           {aba === 'curso' &&
             (alvo && scoreAlvo ? (
-              <CourseDetail universo={universo} base={base} target={alvo} score={scoreAlvo} done={done} />
+              <CourseDetail
+                universo={universo}
+                base={base}
+                target={alvo}
+                score={scoreAlvo}
+                done={done}
+                onDisc={setDiscAberto}
+              />
             ) : (
               <div className="empty-state">
                 <span className="eyebrow">curso</span>
@@ -346,6 +358,7 @@ export default function App() {
                   elements={redeData.elements}
                   legenda={`${base.curso.nome} + ${alvosRede} cursos · ${redeData.discMostrados} de ${redeData.discTotal} disciplinas compartilhadas`}
                   semCompartilhadas={redeData.discMostrados === 0}
+                  onDisc={setDiscAberto}
                 />
               </div>
             ) : (
@@ -371,6 +384,16 @@ export default function App() {
           {aba === 'metodo' && <Metodo universo={universo} />}
         </section>
       </main>
+
+      {discAberto !== null && (
+        <DiscModal
+          key={discAberto}
+          universo={universo}
+          discId={discAberto}
+          jaTenho={done.ids.has(discAberto)}
+          onClose={fecharDisc}
+        />
+      )}
     </div>
   )
 }

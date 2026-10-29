@@ -104,10 +104,21 @@ export interface CourseModel {
   equivals: Map<number, EquivItem[]>
 }
 
+// Catálogo global de disciplinas. `ch` em horas.
+export interface Disciplina {
+  id: number
+  codigo: string
+  nome: string
+  ch: number
+  creditos: number | null
+  departamento: string | null
+  situacao: string | null
+}
+
 export interface Universe {
   cursos: CourseModel[]
   byCurso: Map<number, CourseModel>
-  disciplinas: Map<number, { id: number; codigo: string; nome: string; ch: number }>
+  disciplinas: Map<number, Disciplina>
   /** disciplina -> cursos que a listam */
   cursosByDisc: Map<number, number[]>
   /** TCC/TCG/estágio/monografia: nunca contam como DCG de outro curso */

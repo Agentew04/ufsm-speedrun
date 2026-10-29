@@ -11,6 +11,7 @@ interface Props {
   target: CourseModel
   score: CourseScore
   done: Done
+  onDisc: (id: number) => void
 }
 
 function resumoPrereq(target: CourseModel, discId: number): string[] {
@@ -30,7 +31,7 @@ function resumoPrereq(target: CourseModel, discId: number): string[] {
   return saida
 }
 
-export function CourseDetail({ universo, base, target, score, done }: Props) {
+export function CourseDetail({ universo, base, target, score, done, onDisc }: Props) {
   const [vista, setVista] = useState<'lista' | 'grafo'>('lista')
   const grafo = useMemo(() => buildPrereqGraph(universo, target, done, score), [universo, target, done, score])
 
@@ -168,7 +169,13 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                   {lista.map((o) => {
                     const reqs = resumoPrereq(target, o.discId)
                     return (
-                      <div key={o.id} className="disc-row">
+                      <button
+                        key={o.id}
+                        type="button"
+                        className="disc-row"
+                        onClick={() => onDisc(o.discId)}
+                        title="ver ementa"
+                      >
                         <span className="cl-code">{o.codigo}</span>
                         <span className="disc-name">{o.nome}</span>
                         <span className="mono tiny dim">{o.ch}h</span>
@@ -181,7 +188,7 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                             {reqs.length > 1 ? '…' : ''}
                           </span>
                         )}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -260,21 +267,21 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
               ) : (
                 <ul className="covered">
                   {score.fixedCovered.map((o) => (
-                    <li key={o.id}>
+                    <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
                       <span className="cl-code">{o.codigo}</span>
                       <span className="disc-name">{o.nome}</span>
                       <span className="mono tiny dim">{o.ch}h</span>
                     </li>
                   ))}
                   {score.fixedEquiv.map((o) => (
-                    <li key={o.id}>
+                    <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
                       <span className="cl-code">{o.codigo}</span>
                       <span className="disc-name">{o.nome}</span>
                       <span className="badge b-equiv">equiv</span>
                     </li>
                   ))}
                   {score.fixedEquivParcial.map((o) => (
-                    <li key={o.id}>
+                    <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
                       <span className="cl-code">{o.codigo}</span>
                       <span className="disc-name">{o.nome}</span>
                       <span className="badge b-equiv" title="equivalência julgada 'parcial' — sinal fraco">
@@ -283,7 +290,7 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                     </li>
                   ))}
                   {score.fixedDcg.map((o) => (
-                    <li key={o.id}>
+                    <li key={o.id} className="is-click" tabIndex={0} title="ver ementa" onClick={() => onDisc(o.discId)} onKeyDown={(e) => { if (e.key === 'Enter') onDisc(o.discId) }}>
                       <span className="cl-code">{o.codigo}</span>
                       <span className="disc-name">{o.nome}</span>
                       <span className="badge b-dcg">DCG</span>
@@ -366,7 +373,13 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
         </div>
       ) : (
         <div className="panel grafo-full">
-          <PrereqGraph elements={elementos} temPrereq={temPrereq} temEquiv={temEquiv} altura={620} />
+          <PrereqGraph
+            elements={elementos}
+            temPrereq={temPrereq}
+            temEquiv={temEquiv}
+            altura={620}
+            onDisc={onDisc}
+          />
           <p className="note tiny">
             Colunas = período ideal do currículo. Linha azul = pré-requisito oficial (OR entre
             blocos, AND dentro do bloco); tracejada violeta = equivalência. Onde não há aresta, a

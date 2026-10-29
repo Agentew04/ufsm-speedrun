@@ -46,6 +46,11 @@ soltar também funciona). Dá para apontar outro banco com `?db=./caminho.db`.
 | **Mapa** | heatmap 148×148: custo de ir de qualquer curso para qualquer curso. Clique abre o par. |
 | **Método** | premissas, limites e estado da coleta. |
 
+Clicar numa cadeira (na lista, no grafo ou nas alavancas) abre o **modal da
+disciplina**: CH, créditos, departamento e a ementa. O texto vem de
+`ementas.db.gz`, baixado só no primeiro clique; a **bibliografia** é um bloco
+que baixa `bibliografias.db.gz` só quando você expande.
+
 O checklist da barra lateral deixa ajustar o que já foi cumprido: semestre
 atual, disciplinas individuais e cadeiras feitas em outro curso/instituição.
 O interruptor **DCG estratégica** (só aparece quando o curso tem cota de DCG

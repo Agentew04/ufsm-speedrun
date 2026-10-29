@@ -113,11 +113,13 @@ function Graph({
   height,
   layout,
   onReady,
+  onDisc,
 }: {
   elements: ElementDefinition[]
   height: number
   layout: LayoutOptions
   onReady?: (cy: Core) => void
+  onDisc?: (id: number) => void
 }) {
   const container = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<string | null>(null)
@@ -145,6 +147,10 @@ function Graph({
       cy.elements().removeClass('dim hl')
       setHover(null)
     })
+    cy.on('tap', 'node[kind="disc"]', (evt) => {
+      const id = Number(String(evt.target.id()).slice(1))
+      if (Number.isFinite(id)) onDisc?.(id)
+    })
 
     const ro = new ResizeObserver(() => cy.resize())
     ro.observe(container.current)
@@ -153,7 +159,7 @@ function Graph({
       ro.disconnect()
       cy.destroy()
     }
-  }, [elements, layout, onReady])
+  }, [elements, layout, onReady, onDisc])
 
   return (
     <div className="graph-shell" style={{ height }}>
@@ -168,11 +174,13 @@ export function PrereqGraph({
   temPrereq,
   temEquiv,
   altura = 520,
+  onDisc,
 }: {
   elements: ElementDefinition[]
   temPrereq: number
   temEquiv: number
   altura?: number
+  onDisc?: (id: number) => void
 }) {
   const [filtro, setFiltro] = useState<'tudo' | 'novas'>('tudo')
   const [cy, setCy] = useState<Core | null>(null)
@@ -215,7 +223,7 @@ export function PrereqGraph({
           {temPrereq === 0 && ' — a coleta ainda não chegou neste curso'}
         </span>
       </div>
-      <Graph elements={filtrados} layout={LAYOUT_PRESET} height={altura} onReady={setCy} />
+      <Graph elements={filtrados} layout={LAYOUT_PRESET} height={altura} onReady={setCy} onDisc={onDisc} />
       <div className="legend">
         <span><i className="dot done" /> já cumprida</span>
         <span><i className="dot new" /> nova</span>
@@ -231,10 +239,12 @@ export function NetworkGraph({
   elements,
   legenda,
   semCompartilhadas,
+  onDisc,
 }: {
   elements: ElementDefinition[]
   legenda: string
   semCompartilhadas: boolean
+  onDisc?: (id: number) => void
 }) {
   return (
     <div className="graph-block">
@@ -249,7 +259,7 @@ export function NetworkGraph({
           pré-requisitos na aba Curso.
         </div>
       ) : (
-        <Graph elements={elements} layout={LAYOUT_REDE} height={560} />
+        <Graph elements={elements} layout={LAYOUT_REDE} height={560} onDisc={onDisc} />
       )}
       <div className="legend">
         <span><i className="dot done" /> você já tem</span>

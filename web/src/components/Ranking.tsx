@@ -11,13 +11,14 @@ interface Props {
   done: Done
   onSelect: (id: number) => void
   selecionado: number | null
+  onDisc: (id: number) => void
 }
 
 type Ordem = 'semestres' | 'ch' | 'disciplinas' | 'aproveitamento' | 'nome'
 
 const CAMPUS_ORDEM = (a: string, b: string) => a.localeCompare(b, 'pt-BR')
 
-export function Ranking({ universo, baseId, scores, done, onSelect, selecionado }: Props) {
+export function Ranking({ universo, baseId, scores, done, onSelect, selecionado, onDisc }: Props) {
   const [busca, setBusca] = useState('')
   const [campus, setCampus] = useState('todos')
   const [modalidade, setModalidade] = useState('todos')
@@ -228,7 +229,16 @@ export function Ranking({ universo, baseId, scores, done, onSelect, selecionado 
           </div>
           <div className="lever-list">
             {levers.map((l) => (
-              <div key={l.discId} className="lever" title={l.cursos.slice(0, 12).join(', ')}>
+              <div
+                key={l.discId}
+                className="lever is-click"
+                title={`${l.cursos.slice(0, 12).join(', ')} — clique para ver a ementa`}
+                tabIndex={0}
+                onClick={() => onDisc(l.discId)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onDisc(l.discId)
+                }}
+              >
                 <span className="cl-code">{l.codigo}</span>
                 <span className="lever-name">{l.nome}</span>
                 <span className="lever-count">
