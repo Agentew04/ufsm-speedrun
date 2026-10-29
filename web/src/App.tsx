@@ -11,6 +11,7 @@ import { NetworkGraph } from './components/Graph'
 import { Matrix } from './components/Matrix'
 import { Metodo } from './components/Metodo'
 import { SpeedrunView } from './components/Speedrun'
+import { buildDiagnostico } from './lib/diag'
 import { num } from './lib/format'
 
 type Aba = 'ranking' | 'curso' | 'todos' | 'rede' | 'mapa' | 'metodo'
@@ -155,6 +156,15 @@ export default function App() {
     return <DbGate onBytes={onBytes} status={status} mensagem={mensagem} />
   }
 
+  // modo dev: ?diag=1 devolve o JSON do auditor em vez da UI
+  if (new URLSearchParams(location.search).has('diag') && base) {
+    return (
+      <pre id="diag" style={{ whiteSpace: 'pre-wrap', padding: 16, fontSize: 11 }}>
+        {JSON.stringify(buildDiagnostico(universo, base, done, estrategica), null, 2)}
+      </pre>
+    )
+  }
+
   const melhores = scores
     .filter((s) => s.target.curso.id !== baseId && !s.target.curso.nucleoComum)
     .slice(0, 3)
@@ -280,7 +290,13 @@ export default function App() {
             ))}
 
           {aba === 'todos' && (
-            <SpeedrunView universo={universo} base={base} done={done} onOpenCurso={escolherAlvo} />
+            <SpeedrunView
+              universo={universo}
+              base={base}
+              done={done}
+              estrategica={estrategica}
+              onOpenCurso={escolherAlvo}
+            />
           )}
 
           {aba === 'rede' &&

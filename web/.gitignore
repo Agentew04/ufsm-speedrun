@@ -28,3 +28,7 @@ public/*.db-shm
 *.njsproj
 *.sln
 *.sw?
+
+# diagnóstico exportado no modo dev
+front-diag*.json
+

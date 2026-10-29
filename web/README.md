@@ -8,6 +8,10 @@ UFSM, sem telemetria — com o Wi-Fi desligado funciona igual.
 ## Rodar
 
 ```powershell
+# 0. se o banco da coleta for antigo, qualquer comando do coletor aplica as
+#    migrações de schema (colunas novas, views). Depois reexporte:
+python -m ufsm_speedrun stats
+
 # 1. copia o banco com o WAL já aplicado -> web/public/ufsm.db
 python web/scripts/snapshot-db.py
 

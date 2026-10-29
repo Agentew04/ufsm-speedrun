@@ -56,6 +56,9 @@ export interface LoadProgress {
  */
 export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => void): Universe {
   onProgress?.({ label: 'lendo cursos' })
+  const temColunaNucleo = q<{ name: string }>(db, 'PRAGMA table_info(curso)').some(
+    (r) => str(r.name) === 'eh_nucleo_comum',
+  )
   const cursos = q<{
     id: number
     nome: string
@@ -64,7 +67,18 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     modalidade: string | null
     grau: string | null
     classificacao: string | null
-  }>(db, 'SELECT id, nome, nome_lista, campus, modalidade, grau, classificacao FROM curso ORDER BY nome')
+    eh_nucleo_comum: number | null
+    nucleo_comum_motivo: string | null
+  }>(
+    db,
+    temColunaNucleo
+      ? `SELECT id, nome, nome_lista, campus, modalidade, grau, classificacao,
+                eh_nucleo_comum, nucleo_comum_motivo
+           FROM curso ORDER BY nome`
+      : `SELECT id, nome, nome_lista, campus, modalidade, grau, classificacao,
+                NULL AS eh_nucleo_comum, NULL AS nucleo_comum_motivo
+           FROM curso ORDER BY nome`,
+  )
 
   const versoes = q<Record<string, unknown>>(
     db,
@@ -104,13 +118,36 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
        JOIN prereq_item pi ON pi.bloco_id = pb.id`,
   )
 
-  const equivRaw = q<Record<string, unknown>>(
-    db,
-    `SELECT eb.disciplina_curriculo_id AS dc_id, eb.id AS bloco_id,
-            ei.disciplina_req_id, ei.disciplina_req_codigo
-       FROM equivalencia_bloco eb
-       JOIN equivalencia_item ei ON ei.bloco_id = eb.id`,
-  )
+  onProgress?.({ label: 'lendo equivalências' })
+  // v_equivalencia_efetiva = oficial + julgadas (Fase 6a/6b). Bancos antigos
+  // podem não ter a view nem a tabela de julgadas — daí os fallbacks.
+  const EQUIV_OFICIAL = `
+    SELECT dc.disciplina_id AS alvo_id, ei.disciplina_req_id AS substituta_id,
+           'oficial' AS origem, 1.0 AS confianca, 'equivalente' AS veredito
+      FROM equivalencia_item ei
+      JOIN equivalencia_bloco eb ON eb.id = ei.bloco_id
+      JOIN disciplina_curriculo dc ON dc.id = eb.disciplina_curriculo_id
+     WHERE ei.disciplina_req_id IS NOT NULL`
+  const EQUIV_JULGADA = `
+    SELECT disciplina_a AS alvo_id, disciplina_b AS substituta_id,
+           'julgada' AS origem, confianca, veredito
+      FROM equivalencia_julgada WHERE veredito IN ('equivalente', 'parcial')
+    UNION ALL
+    SELECT disciplina_b AS alvo_id, disciplina_a AS substituta_id,
+           'julgada' AS origem, confianca, veredito
+      FROM equivalencia_julgada WHERE veredito IN ('equivalente', 'parcial')`
+  const AGRUPAR = ' SELECT alvo_id, substituta_id, MAX(origem) AS origem, MAX(confianca) AS confianca, MIN(veredito) AS veredito FROM ('
+
+  let equivRaw: Record<string, unknown>[] = []
+  try {
+    equivRaw = q<Record<string, unknown>>(db, `${AGRUPAR}SELECT * FROM v_equivalencia_efetiva) GROUP BY alvo_id, substituta_id`)
+  } catch {
+    try {
+      equivRaw = q<Record<string, unknown>>(db, `${AGRUPAR}${EQUIV_OFICIAL} UNION ALL ${EQUIV_JULGADA}) GROUP BY alvo_id, substituta_id`)
+    } catch {
+      equivRaw = q<Record<string, unknown>>(db, `${AGRUPAR}${EQUIV_OFICIAL}) GROUP BY alvo_id, substituta_id`)
+    }
+  }
 
   const meta = q<Record<string, unknown>>(
     db,
@@ -222,17 +259,21 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     })
   }
 
-  const equivByDc = new Map<number, EquivItem[]>()
+  const equivByDisc = new Map<number, EquivItem[]>()
   for (const e of equivRaw) {
-    const dcId = num(e.dc_id)
-    const codigo = optStr(e.disciplina_req_codigo)
+    const alvo = num(e.alvo_id)
+    const sub = optNum(e.substituta_id)
+    if (!alvo || !sub || alvo === sub) continue
     const item: EquivItem = {
-      discId: optNum(e.disciplina_req_id) ?? (codigo ? (discByCodigo.get(codigo) ?? null) : null),
-      codigo,
+      discId: sub,
+      codigo: discById.get(sub)?.codigo ?? null,
+      origem: str(e.origem) === 'julgada' ? 'julgada' : 'oficial',
+      confianca: Number(e.confianca ?? 1) || 1,
+      veredito: str(e.veredito) === 'parcial' ? 'parcial' : 'equivalente',
     }
-    const list = equivByDc.get(dcId)
+    const list = equivByDisc.get(alvo)
     if (list) list.push(item)
-    else equivByDc.set(dcId, [item])
+    else equivByDisc.set(alvo, [item])
   }
 
   onProgress?.({ label: 'montando currículos' })
@@ -259,6 +300,9 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     if (!versao) continue
     const estruturasDoCurso = estruturasByVersao.get(versao.id) ?? []
     const ofertas = ofertasByVersao.get(versao.id) ?? []
+    // classificação vem do ETL (curso.eh_nucleo_comum); o fallback cobre banco antigo
+    const doBanco = num(c.eh_nucleo_comum) === 1
+    const fallback = ehNucleoComum(str(c.nome), optStr(c.nome_lista), versao.chTotal)
     const model = buildCourse(
       {
         id: c.id,
@@ -267,13 +311,14 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
         modalidade: optStr(c.modalidade),
         grau: optStr(c.grau),
         classificacao: optStr(c.classificacao),
-        nucleoComum: ehNucleoComum(str(c.nome), optStr(c.nome_lista), versao.chTotal),
+        nucleoComum: doBanco || fallback,
+        nucleoMotivo: optStr(c.nucleo_comum_motivo) ?? (fallback ? 'heurística do front' : null),
       },
       versao,
       estruturasDoCurso,
       ofertas,
       prereqByDc,
-      equivByDc,
+      equivByDisc,
     )
     models.push(model)
   }
@@ -315,7 +360,7 @@ function buildCourse(
   estruturas: Estrutura[],
   ofertas: Oferta[],
   prereqByDc: Map<number, PrereqBloco[]>,
-  equivByDc: Map<number, EquivItem[]>,
+  equivByDisc: Map<number, EquivItem[]>,
 ): CourseModel {
   const byDisc = new Map<number, Oferta>()
   for (const o of ofertas) {
@@ -437,7 +482,7 @@ function buildCourse(
   for (const o of ofertas) {
     const p = prereqByDc.get(o.id)
     if (p) prereqs.set(o.discId, p)
-    const e = equivByDc.get(o.id)
+    const e = equivByDisc.get(o.discId)
     if (e) equivals.set(o.discId, e)
   }
 

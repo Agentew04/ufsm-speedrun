@@ -47,6 +47,8 @@ export interface CourseScore {
   fixedCovered: Oferta[]
   /** obrigatórias cobertas por equivalência oficial (não foram cursadas) */
   fixedEquiv: Oferta[]
+  /** obrigatórias cobertas por equivalência julgada "parcial" (sinal fraco) */
+  fixedEquivParcial: Oferta[]
   /** obrigatórias cobertas pelas horas de DCG/cota aberta do curso de origem */
   fixedDcg: Oferta[]
   semestres: number
@@ -151,20 +153,30 @@ export function scoreCourse(
   const estrategica = opcoes?.estrategica ?? true
   const fixedCovered: Oferta[] = []
   const fixedEquiv: Oferta[] = []
+  const fixedEquivParcial: Oferta[] = []
   const fixedDcg: Oferta[] = []
   const fixedMissing: Oferta[] = []
 
-  // equivalência oficial: o aluno tem uma disciplina que a matriz aceita no
-  // lugar da obrigatória. A coleta está em andamento — o que não veio é ignorado.
-  const cobertasPorEquivalencia = new Set<number>()
+  // equivalência efetiva (oficial + julgada): "parcial" conta como cobertura,
+  // mas fica marcada na UI como sinal mais fraco.
+  const equivStatus = new Map<number, 'equivalente' | 'parcial'>()
   for (const [discId, itens] of target.equivals) {
     if (done.ids.has(discId)) continue
-    if (itens.some((it) => it.discId !== null && done.ids.has(it.discId))) cobertasPorEquivalencia.add(discId)
+    let full = false
+    let parcial = false
+    for (const it of itens) {
+      if (it.discId === null || !done.ids.has(it.discId)) continue
+      if (it.veredito === 'parcial') parcial = true
+      else full = true
+    }
+    if (full) equivStatus.set(discId, 'equivalente')
+    else if (parcial) equivStatus.set(discId, 'parcial')
   }
 
   for (const o of target.fixed) {
     if (done.ids.has(o.discId)) fixedCovered.push(o)
-    else if (cobertasPorEquivalencia.has(o.discId)) fixedEquiv.push(o)
+    else if (equivStatus.get(o.discId) === 'equivalente') fixedEquiv.push(o)
+    else if (equivStatus.get(o.discId) === 'parcial') fixedEquivParcial.push(o)
     else fixedMissing.push(o)
   }
 
@@ -305,7 +317,10 @@ export function scoreCourse(
 
   const schedule = agenda && !leve ? planSemesters(target, itens, done) : []
 
-  const overlapCh = [...fixedCovered, ...fixedEquiv, ...fixedDcg].reduce((s, o) => s + o.ch, 0)
+  const overlapCh = [...fixedCovered, ...fixedEquiv, ...fixedEquivParcial, ...fixedDcg].reduce(
+    (s, o) => s + o.ch,
+    0,
+  )
 
   return {
     target,
@@ -316,6 +331,7 @@ export function scoreCourse(
     fixedMissing,
     fixedCovered,
     fixedEquiv,
+    fixedEquivParcial,
     fixedDcg,
     semestres: agenda && !leve ? schedule.length : Math.ceil(extraHoras / Math.max(1, target.cargaSemestre)),
     schedule,

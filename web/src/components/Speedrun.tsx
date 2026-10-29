@@ -2,21 +2,35 @@ import { useMemo, useState } from 'react'
 import type { CourseModel, Universe } from '../db/types'
 import type { Done } from '../lib/plan'
 import { buildSpeedrun } from '../lib/speedrun'
+import { buildDiagnostico } from '../lib/diag'
 import { horas, norm, num } from '../lib/format'
 
 interface Props {
   universo: Universe
   base: CourseModel | null
   done: Done
+  estrategica: boolean
   onOpenCurso: (id: number) => void
 }
 
-export function SpeedrunView({ universo, base, done, onOpenCurso }: Props) {
+export function SpeedrunView({ universo, base, done, estrategica, onOpenCurso }: Props) {
   const [busca, setBusca] = useState('')
   const dados = useMemo(
     () => (base ? buildSpeedrun(universo, done) : null),
     [universo, base, done],
   )
+
+  const exportarDiagnostico = () => {
+    if (!base || !dados) return
+    const payload = buildDiagnostico(universo, base, done, estrategica)
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `front-diag-${base.curso.id}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const filtrados = useMemo(() => {
     if (!dados) return []
@@ -60,8 +74,20 @@ export function SpeedrunView({ universo, base, done, onOpenCurso }: Props) {
   return (
     <div className="speedrun">
       <header className="speedrun-head">
-        <span className="eyebrow">run completo · {base.curso.nome}</span>
-        <h2>Fechar os 148 cursos, na melhor ordem</h2>
+        <div className="row-between">
+          <div>
+            <span className="eyebrow">run completo · {base.curso.nome}</span>
+            <h2>Fechar os 148 cursos, na melhor ordem</h2>
+          </div>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={exportarDiagnostico}
+            title="JSON no formato do auditor: python -m ufsm_speedrun auditar --front arquivo.json"
+          >
+            exportar diagnóstico
+          </button>
+        </div>
         <p className="hint">
           Como disciplina é global, o total de cadeiras é o mesmo em qualquer ordem — o que muda é o
           quão cedo cada curso fecha. A rota abaixo é gulosa: a cada passo escolhe o curso que custa

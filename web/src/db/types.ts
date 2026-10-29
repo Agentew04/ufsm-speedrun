@@ -10,6 +10,7 @@ export interface Curso {
   classificacao: string | null
   /** ABI / núcleo comum: não é um curso completo, é a entrada que leva a uma habilitação */
   nucleoComum: boolean
+  nucleoMotivo: string | null
 }
 
 export interface Versao {
@@ -62,6 +63,9 @@ export interface PrereqBloco {
 export interface EquivItem {
   discId: number | null
   codigo: string | null
+  origem: 'oficial' | 'julgada'
+  confianca: number
+  veredito: 'equivalente' | 'parcial'
 }
 
 export type QuotaKind = 'eletiva' | 'dcg' | 'livre' | 'atividade'

@@ -195,10 +195,48 @@ Visuais/Licenciatura 795 h, CC 330 h, Eng. Telecom 390 h.
 
 ### 8.4 Ementas e CH nula
 
-8.819 de 11.159 disciplinas com `programa_texto` (79%) — o `.db` foi de 4,6 MB
-para 40,5 MB, ainda tranquilo para o sql.js. Duas disciplinas vêm com
-`ch_total = NULL` (QMC1885, QMC1886) e entram com 0 h; vale um aviso para a
-coleta.
+10.344 de 11.159 disciplinas com `programa_texto` (93%) — o `.db` foi para 46 MB,
+ainda tranquilo para o sql.js. Duas disciplinas vêm com `ch_total = NULL`
+(`QMC1885`, `QMC1886`) e entram com 0 h; vale um aviso para a coleta.
+
+## 9. Auditoria cruzada (frente A × frente B)
+
+O auditor em `ufsm_speedrun/auditor.py` é uma segunda implementação das mesmas
+regras. Para comparar, o front exporta o JSON no formato dele:
+
+- aba **Todos** → botão "exportar diagnóstico"; ou
+- modo dev `?diag=1#b=701` (renderiza o JSON puro na página).
+
+```
+python web/scripts/snapshot-db.py
+python -m ufsm_speedrun auditar                 # referência
+python -m ufsm_speedrun auditar --front front-diag-701.json
+```
+
+Resultado em 2026-10-28 (base CC, 146 alvos):
+
+| | python | front |
+|---|---|---|
+| rota | 145 cursos · 4.991 disc · 301.480 h | idem |
+| primeiros 80 passos | — | **idênticos** |
+| alvos divergentes | 27 (18%) | |
+
+O que explica as divergências (nenhuma delas muda o top-10, cujo CH bate
+exatamente: 810, 900, 960, 1.080, 1.260…):
+
+1. **`semestres`**: o auditor usa o piso `ceil(CH/carga)`; o front usa o plano
+   real (pré-requisitos + teto de CH), que às vezes é 1 semestre maior. O JSON
+   exporta os dois (`semestres` e `semestres_plano`).
+2. **Desempate de candidatas de cota**: quando duas candidatas têm o mesmo
+   `cursosDe`, a ordem escolhida difere um pouco; isso muda o pool no fim da
+   rota (passos 81+ trocam de ordem, com horas equivalentes).
+3. **Disciplinas com `ch_total` nulo**: o auditor conta a oferta duplicada em
+   dois núcleos (1 disciplina a mais, 0 h) — é o dado sujo do §8.4, não a regra.
+4. **Cotas restantes de 15 h**: diferenças de arredondamento em `free_need`
+   aparecem como ±15 h em 3 alvos.
+
+O caminho para zerar: o auditor passa a usar `semestres` do plano e a mesma
+ordem de desempate das candidatas; e a coleta resolve o `ch_total` nulo.
 
 ## 7. Run completo (aba `Todos`)
 

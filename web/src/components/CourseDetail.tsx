@@ -119,8 +119,11 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
           <span className="kpi-label">reaproveitamento</span>
           <b>{pct(score.overlapPct)}</b>
           <span className="kpi-foot">
-            {score.fixedCovered.length + score.fixedEquiv.length + score.fixedDcg.length} de{' '}
-            {target.fixed.length} obrigatórias
+            {score.fixedCovered.length +
+              score.fixedEquiv.length +
+              score.fixedEquivParcial.length +
+              score.fixedDcg.length}{' '}
+            de {target.fixed.length} obrigatórias
           </span>
         </div>
       </div>
@@ -244,7 +247,10 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                 <span className="eyebrow">de graça</span>
                 <h3>O que você já mata</h3>
               </div>
-              {score.fixedCovered.length === 0 && score.fixedEquiv.length === 0 && score.fixedDcg.length === 0 ? (
+              {score.fixedCovered.length === 0 &&
+              score.fixedEquiv.length === 0 &&
+              score.fixedEquivParcial.length === 0 &&
+              score.fixedDcg.length === 0 ? (
                 <p className="hint">Nenhuma obrigatória em comum com o que você já cumpriu.</p>
               ) : (
                 <ul className="covered">
@@ -262,6 +268,15 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                       <span className="badge b-equiv">equiv</span>
                     </li>
                   ))}
+                  {score.fixedEquivParcial.map((o) => (
+                    <li key={o.id}>
+                      <span className="cl-code">{o.codigo}</span>
+                      <span className="disc-name">{o.nome}</span>
+                      <span className="badge b-equiv" title="equivalência julgada 'parcial' — sinal fraco">
+                        ~equiv
+                      </span>
+                    </li>
+                  ))}
                   {score.fixedDcg.map((o) => (
                     <li key={o.id}>
                       <span className="cl-code">{o.codigo}</span>
@@ -270,6 +285,12 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                     </li>
                   ))}
                 </ul>
+              )}
+              {score.fixedEquivParcial.length > 0 && (
+                <p className="note tiny">
+                  <b>~equiv</b> = par julgado <em>parcial</em> pela heurística de ementa (Fase 6a):
+                  conta como cobertura, mas com confiança menor. Vale conferir antes de apostar.
+                </p>
               )}
               {score.fixedDcg.length > 0 && (
                 <p className="note tiny">
