@@ -5,8 +5,14 @@ export interface Done {
   ids: Set<number>
   /** horas de eletivas/DCG já cumpridas sem disciplina identificada (cota fechada) */
   freeHoras: number
-  /** parcela de freeHoras que é DCG/cota aberta: aceita qualquer disciplina */
-  freeAberto: number
+  /** horas de cota de DCG (menu ou aberta) que podem ser direcionadas */
+  dcgHoras: number
+  /** disciplinas elegíveis nos menus de DCG do curso-base (sem terminais) */
+  dcgElegiveis: Set<number>
+  /** existe cota de DCG aberta (qualquer disciplina não-terminal) */
+  dcgAberta: boolean
+  /** TCC/TCG/estágio/monografia: nunca contam como DCG */
+  terminais: Set<number>
   /** CH por disciplina (para o pool de eletivas reaproveitáveis) */
   chOf: Map<number, number>
 }
@@ -34,6 +40,7 @@ export interface QuotaPlan {
   cobertoPorJaFeito: number
   faltam: number
   residual: boolean
+  menuFechado: boolean
   sugestoes: { discId: number; codigo: string; nome: string; ch: number }[]
 }
 
@@ -71,7 +78,9 @@ export function makeDone(
   const ids = new Set<number>()
   const ch = new Map<number, number>()
   let freeHoras = 0
-  let freeAberto = 0
+  let dcgHoras = 0
+  const dcgElegiveis = new Set<number>()
+  let dcgAberta = false
 
   const curricular = base
     ? base.fixed.filter((o) => o.periodo >= 99 || concluidoAte === null || o.periodo <= concluidoAte)
@@ -105,13 +114,24 @@ export function makeDone(
       if (q.kind === 'atividade') continue
       const h = Math.round(q.horas * fracao)
       freeHoras += h
-      // só DCG e cota aberta declaradas aceitam qualquer disciplina; menu
-      // fechado e horas residuais não podem ser direcionados para outro curso
-      if (!q.residual && (q.kind === 'dcg' || q.kind === 'livre')) freeAberto += h
+      if (q.residual) continue
+      // DCG com menu fechado não é "hora livre": só serve para preencher a
+      // própria cota do curso, nunca para cobrir obrigatória de outro curso.
+      if (q.kind === 'dcg') {
+        if (q.menuFechado) {
+          for (const id of q.candidatos) dcgElegiveis.add(id)
+        } else {
+          dcgHoras += h
+          dcgAberta = true
+        }
+      } else if (q.kind === 'livre') {
+        dcgHoras += h
+        dcgAberta = true
+      }
     }
   }
 
-  return { ids, freeHoras, freeAberto, chOf: ch }
+  return { ids, freeHoras, dcgHoras, dcgElegiveis, dcgAberta, terminais: universo.terminais, chOf: ch }
 }
 
 /** Pré-requisito efetivo (só disciplinas; período/CH ficam como sinal fraco). */
@@ -180,12 +200,12 @@ export function scoreCourse(
     else fixedMissing.push(o)
   }
 
-  // DCG estratégica: as horas de DCG/cota aberta do curso de origem aceitam
-  // qualquer disciplina do catálogo — então podem ter sido gastas justamente
-  // nas obrigatórias que faltam aqui ("fiz SI de graça como DCG do CC").
-  // Só vale para horas em aberto (dcg/livre), nunca para menu fechado, e só
-  // cobre disciplina cujos pré-requisitos já estão satisfeitos.
-  let livre = estrategica ? Math.min(done.freeAberto, done.freeHoras) : 0
+  // DCG estratégica: horas de DCG do curso de origem só podem ser gastas no
+  // menu daquele curso (ou em qualquer disciplina não-terminal, se a cota é
+  // aberta). TCC/estágio/monografia nunca são cobertos por cota.
+  const elegivelDcg = (id: number) =>
+    !done.terminais.has(id) && (done.dcgAberta || done.dcgElegiveis.has(id))
+  let livre = estrategica ? Math.min(done.dcgHoras, done.freeHoras) : 0
   let livreUsado = 0
   if (livre > 0 && fixedMissing.length) {
     const disponiveis = new Set(done.ids)
@@ -195,7 +215,7 @@ export function scoreCourse(
       cobrou = false
       const sobraDestaRodada: Oferta[] = []
       for (const o of restantes) {
-        if (o.ch <= livre && prereqSatisfied(target, o.discId, disponiveis)) {
+        if (o.ch <= livre && elegivelDcg(o.discId) && prereqSatisfied(target, o.discId, disponiveis)) {
           livre -= o.ch
           livreUsado += o.ch
           fixedDcg.push(o)
@@ -229,8 +249,9 @@ export function scoreCourse(
     }
 
     let coberto = 0
-    if (q.kind === 'eletiva') {
-      // menu fechado: só vale disciplina que está na lista do núcleo
+    const menuFechado = q.kind === 'eletiva' || (q.kind === 'dcg' && q.menuFechado)
+    if (menuFechado) {
+      // menu fechado: só vale disciplina que está na lista do núcleo/menu de DCG
       for (const cand of q.candidatos) {
         if (coberto >= q.horas) break
         if (!done.ids.has(cand)) continue
@@ -240,8 +261,7 @@ export function scoreCourse(
       }
       coberto = Math.min(coberto, q.horas)
     } else {
-      // DCG / cota aberta: qualquer disciplina conta, inclusive as horas de
-      // eletiva que fecharam a cota do curso de origem.
+      // DCG aberta / cota livre: qualquer disciplina não-terminal conta
       coberto = Math.min(q.horas, surplus)
       surplus -= coberto
     }
@@ -269,6 +289,7 @@ export function scoreCourse(
       cobertoPorJaFeito: coberto,
       faltam,
       residual: q.residual,
+      menuFechado: q.menuFechado,
       sugestoes,
     })
     freeNeed += faltam

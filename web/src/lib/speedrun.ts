@@ -63,6 +63,7 @@ function margem(
   poolCh: number,
   livreAberto: number,
   livreFechado: number,
+  done: Done,
   cursosDe: (id: number) => number,
 ): Margem {
   let coveredCh = 0
@@ -81,7 +82,7 @@ function margem(
     missing.push(o)
   }
 
-  // horas de DCG/cota aberta ainda não gastas também podem cobrir obrigatórias
+  // horas de DCG ainda não gastas, só dentro do menu do curso-base
   let livre = livreAberto
   const cobertos: Oferta[] = []
   if (livre > 0 && missing.length) {
@@ -92,7 +93,8 @@ function margem(
       cobrou = false
       const sobra: Oferta[] = []
       for (const o of restantes) {
-        if (o.ch <= livre && prereqSatisfied(target, o.discId, disponiveis)) {
+        const elegivel = !done.terminais.has(o.discId) && (done.dcgAberta || done.dcgElegiveis.has(o.discId))
+        if (o.ch <= livre && elegivel && prereqSatisfied(target, o.discId, disponiveis)) {
           livre -= o.ch
           cobertos.push(o)
           disponiveis.add(o.discId)
@@ -114,8 +116,9 @@ function margem(
   for (const q of target.quotas) {
     if (q.kind === 'atividade') continue
     let coberto = 0
+    const menuFechado = q.kind === 'eletiva' || (q.kind === 'dcg' && q.menuFechado)
 
-    if (q.kind === 'eletiva') {
+    if (menuFechado) {
       for (const cand of q.candidatos) {
         if (coberto >= q.horas) break
         if (!pool.has(cand)) continue
@@ -132,7 +135,7 @@ function margem(
     let falta = q.horas - coberto
     if (falta <= 0) continue
 
-    if (q.kind === 'eletiva' && q.candidatos.length) {
+    if (menuFechado && q.candidatos.length) {
       const cands = q.candidatos
         .filter((c) => !pool.has(c) && !picks.has(c))
         .sort((a, b) => cursosDe(b) - cursosDe(a) || chDe(universo, b) - chDe(universo, a))
@@ -164,22 +167,21 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
   const pool = new Set<number>(done.ids)
   let poolCh = 0
   for (const ch of done.chOf.values()) poolCh += ch
-  let livreAberto = done.freeAberto
-  const livreFechado = Math.max(0, done.freeHoras - done.freeAberto)
+  let livreAberto = done.dcgHoras
+  const livreFechado = Math.max(0, done.freeHoras - done.dcgHoras)
   const horasBase = poolCh + livreAberto + livreFechado
 
   const cursos = universo.cursos
   const cargas = cursos.map((c) => c.cargaSemestre).sort((a, b) => a - b)
   const carga = cargas.length ? cargas[Math.floor(cargas.length / 2)] : 540
 
-  // quantos cursos listam a disciplina (para escolher candidatas de cota)
-  const cursosDe = (id: number) => universo.cursosByDisc.get(id)?.length ?? 0
-
-  // estatística de compartilhamento (baseada nas obrigatórias, não nas cotas)
+  // quantos cursos têm a disciplina como obrigatória (critério de desempate
+  // das candidatas de cota — igual ao auditor)
   const emQuantos = new Map<number, number>()
   for (const c of cursos) {
     for (const o of c.fixed) emQuantos.set(o.discId, (emQuantos.get(o.discId) ?? 0) + 1)
   }
+  const cursosDe = (id: number) => emQuantos.get(id) ?? 0
 
   // obrigatórias de outros currículos que entraram como DCG do curso-base
   const dcgEstrategica: { discId: number; codigo: string; nome: string; ch: number }[] = []
@@ -199,7 +201,7 @@ export function buildSpeedrun(universo: Universe, done: Done): Speedrun {
     for (const id of restantes) {
       const target = porId.get(id)
       if (!target) continue
-      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, cursosDe)
+      const m = margem(universo, target, pool, poolCh, livreAberto, livreFechado, done, cursosDe)
       const chave = m.horas + m.missing.length * 1e-3 + target.curso.id * 1e-9
       if (chave < melhorChave) {
         melhorChave = chave

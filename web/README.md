@@ -44,9 +44,8 @@ soltar também funciona). Dá para apontar outro banco com `?db=./caminho.db`.
 
 O checklist da barra lateral deixa ajustar o que já foi cumprido: semestre
 atual, disciplinas individuais e cadeiras feitas em outro curso/instituição.
-O interruptor **DCG estratégica** decide se as horas de DCG/cota aberta do seu
-curso podem ter sido gastas nas obrigatórias do curso-alvo (é o que encurta o
-próximo curso de verdade).
+O interruptor **DCG estratégica** (só aparece quando o curso tem cota de DCG
+aberta) decide se essas horas podem cobrir obrigatórias de outro curso.
 
 ## Como a conta é feita
 
@@ -56,12 +55,15 @@ Resumo (detalhes em [`docs/frontend.md`](../docs/frontend.md)):
   currículo que a lista;
 - **obrigatórias** do alvo que você não tem = cadeiras novas;
 - **cotas** (`ch_minima` menos as obrigatórias do núcleo) precisam ser fechadas:
-  - `DCG` e cota aberta aceitam qualquer disciplina — o que você já fez conta;
+  - `DCG` só vale dentro do **menu do próprio curso** (`dcg_elegivel`); cota
+    aberta (1 das 129) aceita qualquer disciplina não-terminal;
   - `eletiva/optativa de núcleo` é menu fechado — só vale o que está listado;
+  - **TCC/TCG, estágio e monografia nunca contam como DCG** (`eh_terminal`);
 - **semestres extras** = bin-packing das cadeiras que faltam, respeitando os
   pré-requisitos catalogados e a CH máxima por período do curso-alvo;
-- **equivalência oficial** (`equivalencia_item`) credita a disciplina antiga no
-  lugar da nova, quando a coleta já trouxe o par.
+- **equivalência efetiva** (`v_equivalencia_efetiva`: oficial + 943 pares
+  julgados) credita a disciplina antiga no lugar da nova; `parcial` entra com
+  badge mais fraco.
 
 ## Stack
 

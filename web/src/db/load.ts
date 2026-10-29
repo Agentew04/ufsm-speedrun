@@ -276,6 +276,31 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     else equivByDisc.set(alvo, [item])
   }
 
+  // DCG: menu fechado materializado no ETL (`dcg_elegivel`) + terminais.
+  // Banco antigo não tem nenhum dos dois — cai no comportamento anterior.
+  const dcgMenu = new Map<number, { ids: number[]; fonte: string }>()
+  try {
+    for (const r of q<Record<string, unknown>>(
+      db,
+      'SELECT estrutura_id, disciplina_id, fonte FROM dcg_elegivel',
+    )) {
+      const eid = num(r.estrutura_id)
+      const atual = dcgMenu.get(eid)
+      if (atual) atual.ids.push(num(r.disciplina_id))
+      else dcgMenu.set(eid, { ids: [num(r.disciplina_id)], fonte: str(r.fonte) })
+    }
+  } catch {
+    /* sem dcg_elegivel */
+  }
+  let terminais = new Set<number>()
+  try {
+    terminais = new Set(
+      q<{ id: number }>(db, 'SELECT id FROM disciplina WHERE eh_terminal = 1').map((r) => num(r.id)),
+    )
+  } catch {
+    /* sem eh_terminal */
+  }
+
   onProgress?.({ label: 'montando currículos' })
   // ABI/núcleo comum: mesmo `nome_lista` de um curso bem maior (o ABI é a
   // entrada, o diploma continua na habilitação). Ex.: Artes Cênicas 960 h vs
@@ -319,6 +344,8 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
       ofertas,
       prereqByDc,
       equivByDisc,
+      dcgMenu,
+      terminais,
     )
     models.push(model)
   }
@@ -340,6 +367,7 @@ export function loadUniverse(db: Database, onProgress?: (p: LoadProgress) => voi
     byCurso: new Map(models.map((m) => [m.curso.id, m])),
     disciplinas: discById,
     cursosByDisc,
+    terminais,
     meta: {
       cursos: num(meta.cursos),
       versoes: num(meta.versoes),
@@ -361,6 +389,8 @@ function buildCourse(
   ofertas: Oferta[],
   prereqByDc: Map<number, PrereqBloco[]>,
   equivByDisc: Map<number, EquivItem[]>,
+  dcgMenu: Map<number, { ids: number[]; fonte: string }>,
+  terminais: Set<number>,
 ): CourseModel {
   const byDisc = new Map<number, Oferta>()
   for (const o of ofertas) {
@@ -411,14 +441,26 @@ function buildCourse(
     if (deficit <= 0) continue
 
     const daEstrutura = ofertas.filter((o) => o.estruturaId === e.id)
-    const candidatos = daEstrutura
+    let candidatos = daEstrutura
       .filter((o) => o.tipoItem === 2 || o.tipoItem === 3 || o.tipoItem === 5 || o.tipoItem === 7)
       .map((o) => o.discId)
-    // DCG = qualquer disciplina do catálogo; já optativa/eletiva de núcleo é um
-    // menu fechado (só vale o que está listado).
     const temDcg = daEstrutura.some((o) => o.tipoItem === 5 || o.tipoItem === 7)
     const atividades = daEstrutura.filter((o) => o.tipoItem === 4 || o.tipoItem === 8)
     const pareceAtividade = /atividad|extens/i.test(e.descricao)
+
+    // DCG: o menu real vem do ETL (`dcg_elegivel`), já sem TCC/estágio.
+    // Sem a tabela (banco antigo), usa as ofertas do núcleo como aproximação.
+    let menuFechado = false
+    if (temDcg) {
+      const menu = dcgMenu.get(e.id)
+      if (menu) {
+        candidatos = menu.ids
+        menuFechado = menu.fonte === 'menu'
+      } else {
+        menuFechado = candidatos.length > 0
+      }
+      if (terminais.size) candidatos = candidatos.filter((id) => !terminais.has(id))
+    }
 
     if (atividades.length === 0 && candidatos.length === 0 && pareceAtividade) {
       atividadesHoras += deficit
@@ -429,6 +471,7 @@ function buildCourse(
         kind: 'atividade',
         candidatos: [],
         residual: false,
+        menuFechado: false,
       })
       continue
     }
@@ -440,6 +483,7 @@ function buildCourse(
       kind: temDcg ? 'dcg' : candidatos.length ? 'eletiva' : 'livre',
       candidatos,
       residual: false,
+      menuFechado,
     })
   }
   quotas.sort((a, b) => b.horas - a.horas)
@@ -457,6 +501,7 @@ function buildCourse(
       kind: 'livre',
       candidatos: [],
       residual: true,
+      menuFechado: false,
     })
   }
 

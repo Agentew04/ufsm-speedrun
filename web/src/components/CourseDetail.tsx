@@ -213,11 +213,16 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
                               : 'cota aberta: qualquer disciplina do catálogo'}{' '}
                             — faltam {horas(q.faltam)}
                           </span>
+                        ) : q.kind === 'dcg' && q.menuFechado ? (
+                          <span className="dim">
+                            menu de DCG do curso — só vale a lista
+                            {q.sugestoes.length > 0 && ` (${q.sugestoes.slice(0, 3).map((s) => s.codigo).join(', ')})`}
+                            {' '}· faltam {horas(q.faltam)}
+                          </span>
                         ) : q.kind === 'dcg' ? (
                           <span className="dim">
-                            DCG: qualquer disciplina conta — faltam {horas(q.faltam)}
-                            {q.sugestoes.length > 0 &&
-                              ` · na matriz: ${q.sugestoes.slice(0, 3).map((s) => s.codigo).join(', ')}`}
+                            DCG de cota aberta: qualquer disciplina não-terminal — faltam{' '}
+                            {horas(q.faltam)}
                           </span>
                         ) : q.sugestoes.length ? (
                           <span className="dim">
@@ -294,9 +299,9 @@ export function CourseDetail({ universo, base, target, score, done }: Props) {
               )}
               {score.fixedDcg.length > 0 && (
                 <p className="note tiny">
-                  <b>{horas(score.fixedDcg.reduce((s, o) => s + o.ch, 0))}</b> dessas cadeiras cabem
-                  nas suas horas de DCG/cota aberta — você pode tê-las cursado como DCG no curso de
-                  origem. É a jogada que faz "terminar SI logo depois de CC". Ajuste em{' '}
+                  <b>{horas(score.fixedDcg.reduce((s, o) => s + o.ch, 0))}</b> dessas cadeiras estão
+                  no <b>menu de DCG do seu curso</b> — você pode tê-las cursado como DCG no curso de
+                  origem. TCC, estágio e monografia nunca entram nessa conta. Ajuste em{' '}
                   <em>DCG estratégica</em> na barra lateral.
                 </p>
               )}

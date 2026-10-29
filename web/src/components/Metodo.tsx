@@ -29,16 +29,16 @@ export function Metodo({ universo }: { universo: Universe }) {
             O que sobra precisa ser preenchido por eletivas/DCG.
           </p>
           <p className="tiny dim">
-            Cotas com <b>DCG</b> aceitam qualquer disciplina do catálogo (é a definição da sigla),
-            então o que você já cursou conta. Cotas de <b>eletiva/optativa de núcleo</b> são um
-            menu fechado: só valem as disciplinas listadas ali — o app não infla o reaproveitamento
-            usando uma cadeira de outro curso que não está na lista.
+            <b>DCG tem menu fechado</b> (128 das 129 cotas): só vale a lista de disciplinas
+            complementares do próprio currículo. A exceção é a cota aberta (ex.: SI/2026), que aceita
+            qualquer disciplina. E <b>TCC/TCG, estágio e monografia nunca contam como DCG</b> — o TCC
+            é do curso que vai dar o diploma, não se dispensa por cota.
           </p>
           <p className="tiny dim">
-            <b>DCG estratégica:</b> as horas de DCG/cota aberta do seu curso são a parte livre do
-            currículo — podem ter sido gastas em qualquer disciplina do catálogo, inclusive nas
-            obrigatórias de outro curso. O app assume isso por padrão (interruptor na barra
-            lateral); desligue para ver o cenário conservador, em que a DCG só preenche DCG.
+            <b>DCG estratégica:</b> as horas de DCG do seu curso podem ter sido gastas nas
+            obrigatórias de outro curso <em>desde que elas estejam no seu menu de DCG</em> e os
+            pré-requisitos estejam cumpridos. O app assume isso por padrão (interruptor na barra
+            lateral); desligue para ver o cenário conservador.
           </p>
 
           <h3>3. Custo de fechar um curso</h3>

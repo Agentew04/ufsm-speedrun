@@ -76,10 +76,12 @@ export interface Quota {
   descricao: string
   horas: number
   kind: QuotaKind
-  /** disciplinas listadas como opção para essa cota */
+  /** disciplinas listadas como opção para essa cota (menu materializado) */
   candidatos: number[]
   /** sobra entre ch_total do currículo e o que os núcleos declaram (núcleo sem cota) */
   residual: boolean
+  /** DCG com menu explícito: só vale o que está em `candidatos` */
+  menuFechado: boolean
 }
 
 export interface CourseModel {
@@ -108,6 +110,8 @@ export interface Universe {
   disciplinas: Map<number, { id: number; codigo: string; nome: string; ch: number }>
   /** disciplina -> cursos que a listam */
   cursosByDisc: Map<number, number[]>
+  /** TCC/TCG/estágio/monografia: nunca contam como DCG de outro curso */
+  terminais: Set<number>
   meta: {
     cursos: number
     versoes: number

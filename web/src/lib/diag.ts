@@ -28,8 +28,8 @@ export function buildDiagnostico(
     })
   const passos = run.passos
     .filter((p) => p.curso.curso.id !== base.curso.id)
-    .map((p) => ({
-      ordem: p.ordem,
+    .map((p, i) => ({
+      ordem: i + 1,
       curso_id: p.curso.curso.id,
       horasPasso: Math.round(p.horasPasso),
     }))
