@@ -19,12 +19,13 @@ heurístico) não pode ir para o browser.
 | artefato | tamanho | quando carrega |
 |---|---|---|
 | `ufsm-web.db` | 7,9 MB (2,1 MB gz) | no boot |
-| `ementas.db` | 16,1 MB (4,1 MB gz) | no primeiro clique numa cadeira |
+| `ementas.db` | 16,1 MB (4,1 MB gz) | ao abrir a cadeira |
+| `bibliografias.db` | 16,2 MB (4,2 MB gz) | ao expandir "Bibliografia" |
 | `manifest.json` | — | metadados |
 
 O VACUUM passou a fazer parte do pipeline (banco de trabalho caiu 159 → 51 MB).
-O `ementas.db` leva `programa` + `objetivos`; a bibliografia (o maior campo,
-~13 MB) fica atrás de `--com-bibliografia`.
+Cada arquivo corresponde a uma affordance: quem só navega o ranking baixa 2,1 MB
+e nada mais.
 
 **Contrato de consumo:** `docs/nota-frontend.md §7`.
 

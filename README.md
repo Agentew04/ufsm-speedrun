@@ -57,7 +57,8 @@ python -m venv .venv
 | arquivo | tamanho | quando carrega |
 |---|---|---|
 | `ufsm-web.db.gz` | 2,1 MB | no boot |
-| `ementas.db.gz` | 4,1 MB | no primeiro clique numa cadeira |
+| `ementas.db.gz` | 4,1 MB | ao abrir a cadeira (programa + objetivos) |
+| `bibliografias.db.gz` | 4,2 MB | ao expandir o bloco "Bibliografia" |
 
 O texto de ementa (25 MB) não vai no núcleo. Contrato de consumo em
 [docs/nota-frontend.md §6](docs/nota-frontend.md).

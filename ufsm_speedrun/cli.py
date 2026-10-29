@@ -366,7 +366,6 @@ def cmd_publicar(args: argparse.Namespace) -> int:
     publicacao.publicar(
         destino_dir=Path(args.dir) if args.dir else None,
         comprimir=not args.sem_gzip,
-        com_bibliografia=args.com_bibliografia,
     )
     print()
     return 0
@@ -521,8 +520,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("publicar", help="gera os artefatos do front (núcleo + ementas separadas)")
     p.add_argument("--dir", default=None, help="pasta de saída (padrão: data/public)")
     p.add_argument("--sem-gzip", action="store_true", help="não gerar os .gz")
-    p.add_argument("--com-bibliografia", action="store_true",
-                   help="incluir bibliografia no ementas.db (quase dobra o tamanho)")
     p.set_defaults(func=cmd_publicar)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")

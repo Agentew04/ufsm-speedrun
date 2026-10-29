@@ -127,56 +127,70 @@ Impacto medido no auditor: rota **4.991 → 5.152 disciplinas**, 301.480 → 311
 
 Se for implementar só uma coisa desta lista, é essa.
 
-## 6. Artefatos publicados (núcleo + ementas sob demanda)
+## 6. Artefatos publicados: três bancos, três momentos
 
-`python -m ufsm_speedrun publicar` gera em `data/public/`:
+`python -m ufsm_speedrun publicar` gera em `data/public/`. Cada arquivo existe
+porque corresponde a uma affordance diferente da UI — nada baixa antes da hora.
 
 | arquivo | tamanho | quando baixar |
 |---|---|---|
 | `ufsm-web.db.gz` | **2,1 MB** | no boot |
-| `ementas.db.gz` | **4,1 MB** | no primeiro clique numa cadeira |
-| `manifest.json` | — | metadados (tamanhos, contagens) |
+| `ementas.db.gz` | **4,1 MB** | ao abrir a cadeira (programa + objetivos) |
+| `bibliografias.db.gz` | **4,2 MB** | ao expandir o bloco "Bibliografia" |
+| `manifest.json` | — | metadados (tamanhos, contagens, momento de carga) |
 
-O núcleo **não tem texto de ementa** (`programa_texto` é `NULL`) e não tem as
-tabelas de ETL (`rota_*`, `ingest_run`). Do palpite heurístico sobraram só os
-4.829 `equivalente` — a banda de revisão (19 MB) ficou de fora.
+O núcleo **não tem texto** (`programa_texto`, `bibliografia_texto`,
+`objetivos_html` são `NULL`) e não tem as tabelas de ETL (`rota_*`,
+`ingest_run`). Do palpite heurístico sobraram só os 4.829 `equivalente` — a
+banda de revisão (19 MB) ficou de fora.
 
-### Como carregar a ementa
+> ⚠️ A coluna `ementa.bibliografia` **existe mas vem sempre `NULL`**, reservada
+> para compatibilidade. A bibliografia real está em `bibliografias.db`.
+
+### Carregamento sob demanda
 
 ```ts
 import { inflate } from 'pako'   // ~45 KB
 
-let ementas: SQL.Database | null = null
+const cache = new Map<string, SQL.Database>()
 
-async function carregarEmentas() {
-  if (ementas) return ementas
-  const gz = await fetch('/ementas.db.gz').then(r => r.arrayBuffer())
-  ementas = new SQL.Database(inflate(new Uint8Array(gz)))
-  return ementas
+async function banco(nome: 'ementas' | 'bibliografias'): Promise<SQL.Database> {
+  const pronto = cache.get(nome)
+  if (pronto) return pronto
+  const gz = await fetch(`/${nome}.db.gz`).then(r => r.arrayBuffer())
+  const db = new SQL.Database(inflate(new Uint8Array(gz)))
+  cache.set(nome, db)
+  return db
 }
 
-async function ementaDe(disciplinaId: number) {
-  const db = await carregarEmentas()
-  const [res] = db.exec(
-    'SELECT programa, objetivos_html, bibliografia FROM ementa WHERE disciplina_id = ?',
-    [disciplinaId],
-  )
-  if (!res) return null
-  const [programa, objetivos, bibliografia] = res.values[0]
-  return { programa, objetivos, bibliografia }   // bibliografia pode ser null
+// 1) ao abrir a cadeira
+async function ementaDe(id: number) {
+  const db = await banco('ementas')
+  const [res] = db.exec('SELECT programa, objetivos_html FROM ementa WHERE disciplina_id = ?', [id])
+  return res ? { programa: res.values[0][0], objetivos: res.values[0][1] } : null
+}
+
+// 2) ao expandir o bloco de bibliografia (dropdown)
+async function bibliografiaDe(id: number) {
+  const db = await banco('bibliografias')
+  const [res] = db.exec('SELECT texto FROM bibliografia WHERE disciplina_id = ?', [id])
+  return res ? res.values[0][0] : null
 }
 ```
 
-Detalhes:
-- carregue **uma vez** e guarde em memória (não re-baixe por clique)
-- `bibliografia` só vem se publicarmos com `--com-bibliografia` (hoje vem `NULL`)
-- o `ufsm-web.db` **não** tem esses campos — não tente `SELECT programa_texto` nele
+Detalhes que importam:
 
-### Atalho: não precisa de dois bancos no boot
+- carregue **uma vez por sessão** e guarde no `cache` (não re-baixe por clique)
+- o dropdown mostra "carregando…" no primeiro expandir e depois fica instantâneo
+- quem só lê a ementa nunca baixa `bibliografias.db`
+- o `ufsm-web.db` **não** tem esses campos: não tente `SELECT programa_texto` nele
 
-Se preferir simplicidade, da para checar `manifest.json` e só habilitar o botão
-"ver ementa" quando o arquivo existir. Mas os dois bancos são independentes:
-quem nunca clicar nunca baixa os 4,1 MB.
+### Se 4,2 MB no expandir incomodar
+
+Dá para fatiar `bibliografias.db` por prefixo de código (`bib-ELC.db.gz`,
+`bib-MTM.db.gz`, ~60 arquivos de ~70 KB) e buscar só o do prefixo da disciplina.
+O build sabe o prefixo, então é barato de fazer depois — mas multiplica arquivos
+e caches. Hoje não vale; só se o uso mostrar que muita gente expande bibliografia.
 
 ## 7. Um detalhe de modelagem para vocês decidirem
 `makeDone` + `scoreCourse` permitem que horas abertas do curso-base cubram

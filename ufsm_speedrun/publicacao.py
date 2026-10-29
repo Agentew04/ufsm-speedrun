@@ -83,13 +83,11 @@ def exportar_nucleo(origem: Path, destino: Path, *, manter_palpite: bool = True)
         conn.close()
 
 
-def exportar_ementas(origem: Path, destino: Path, *,
-                     com_bibliografia: bool = False) -> int:
-    """Banco separado com o texto de cada disciplina, para carga sob demanda.
+def exportar_ementas(origem: Path, destino: Path) -> int:
+    """Banco do conteúdo: `programa` + `objetivos` (o "o que é essa cadeira").
 
-    Por padrão leva `programa` + `objetivos` (o conteúdo que responde "o que é
-    essa cadeira"). A bibliografia é o maior campo (~13 MB de texto) e o menos
-    consultado: fica de fora salvo com `--com-bibliografia`.
+    A bibliografia saiu daqui e ganhou arquivo próprio, porque só interessa a
+    quem expande aquele bloco — quem só quer ler a ementa não paga por ela.
     """
     if destino.exists():
         destino.unlink()
@@ -103,21 +101,18 @@ def exportar_ementas(origem: Path, destino: Path, *,
                 disciplina_id  INTEGER PRIMARY KEY,
                 codigo         TEXT,
                 programa       TEXT,
-                bibliografia   TEXT,
-                objetivos_html TEXT
+                objetivos_html TEXT,
+                bibliografia   TEXT          -- reservado (NULL); ver bibliografias.db
             );
             CREATE INDEX idx_ementa_codigo ON ementa(codigo);
             """
         )
-        coluna_bib = "bibliografia_texto" if com_bibliografia else "NULL"
-        filtro = ("COALESCE(programa_texto, '') <> '' OR COALESCE(objetivos_html, '') <> ''")
-        if com_bibliografia:
-            filtro += " OR COALESCE(bibliografia_texto, '') <> ''"
         linhas = src.execute(
-            f"""
-            SELECT id, codigo, programa_texto, {coluna_bib}, objetivos_html
+            """
+            SELECT id, codigo, programa_texto, objetivos_html, NULL
             FROM disciplina
-            WHERE {filtro}
+            WHERE COALESCE(programa_texto, '') <> ''
+               OR COALESCE(objetivos_html, '') <> ''
             """
         ).fetchall()
         dst.executemany("INSERT INTO ementa VALUES (?, ?, ?, ?, ?)", linhas)
@@ -129,8 +124,42 @@ def exportar_ementas(origem: Path, destino: Path, *,
     return len(linhas)
 
 
+def exportar_bibliografias(origem: Path, destino: Path) -> int:
+    """Banco das referências bibliográficas — carregado só ao expandir o bloco."""
+    if destino.exists():
+        destino.unlink()
+
+    src = sqlite3.connect(origem)
+    dst = sqlite3.connect(destino, isolation_level=None)
+    try:
+        dst.executescript(
+            """
+            CREATE TABLE bibliografia (
+                disciplina_id INTEGER PRIMARY KEY,
+                codigo        TEXT,
+                texto         TEXT
+            );
+            CREATE INDEX idx_bib_codigo ON bibliografia(codigo);
+            """
+        )
+        linhas = src.execute(
+            """
+            SELECT id, codigo, bibliografia_texto
+            FROM disciplina
+            WHERE COALESCE(bibliografia_texto, '') <> ''
+            """
+        ).fetchall()
+        dst.executemany("INSERT INTO bibliografia VALUES (?, ?, ?)", linhas)
+        dst.execute("VACUUM")
+        dst.execute("ANALYZE")
+    finally:
+        src.close()
+        dst.close()
+    return len(linhas)
+
+
 def publicar(origem: Path | None = None, destino_dir: Path | None = None,
-             *, comprimir: bool = True, com_bibliografia: bool = False) -> dict:
+             *, comprimir: bool = True) -> dict:
     origem = Path(origem or config.DB_PATH)
     if not origem.exists():
         raise FileNotFoundError(f"banco não encontrado: {origem}")
@@ -145,16 +174,21 @@ def publicar(origem: Path | None = None, destino_dir: Path | None = None,
 
     nucleo = destino_dir / "ufsm-web.db"
     ementas = destino_dir / "ementas.db"
+    bibliografias = destino_dir / "bibliografias.db"
 
     print("  gerando núcleo…", flush=True)
     exportar_nucleo(origem, nucleo)
 
     print("  extraindo ementas…", flush=True)
-    n_ementas = exportar_ementas(origem, ementas, com_bibliografia=com_bibliografia)
+    n_ementas = exportar_ementas(origem, ementas)
+
+    print("  extraindo bibliografias…", flush=True)
+    n_bib = exportar_bibliografias(origem, bibliografias)
 
     artefatos = {
         "ufsm-web.db": nucleo,
         "ementas.db": ementas,
+        "bibliografias.db": bibliografias,
     }
     if comprimir:
         for nome, caminho in list(artefatos.items()):
@@ -166,9 +200,14 @@ def publicar(origem: Path | None = None, destino_dir: Path | None = None,
         "gerado_em": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "nucleo": "ufsm-web.db",
         "ementas": "ementas.db",
-        "ementas_carregar": "on_demand",
-        "ementas_com_bibliografia": com_bibliografia,
+        "bibliografias": "bibliografias.db",
+        "carregamento": {
+            "ufsm-web.db": "boot",
+            "ementas.db": "on_demand:clique_na_cadeira",
+            "bibliografias.db": "on_demand:expandir_bibliografia",
+        },
         "disciplinas_com_ementa": n_ementas,
+        "disciplinas_com_bibliografia": n_bib,
         "artefatos": {
             nome: round(_mb(caminho), 2) for nome, caminho in sorted(artefatos.items())
         },
