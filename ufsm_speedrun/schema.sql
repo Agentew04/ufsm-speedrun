@@ -90,10 +90,15 @@ CREATE TABLE IF NOT EXISTS curso (
     url              TEXT,
     campus           TEXT,                  -- rótulo: "Santa Maria", "EaD", ...
     campus_slug      TEXT,                  -- segmento da URL: santa-maria, ...
-    slug             TEXT                   -- slug do curso na URL
+    slug             TEXT,                  -- slug do curso na URL
+    -- ABI / núcleo comum: NÃO é curso completo, é a porta de entrada para uma
+    -- habilitação. Calculado no ETL (ver classificacao.py), não na UI.
+    eh_nucleo_comum  INTEGER NOT NULL DEFAULT 0,
+    nucleo_comum_motivo TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_curso_campus ON curso(campus_slug);
+CREATE INDEX IF NOT EXISTS idx_curso_nucleo ON curso(eh_nucleo_comum);
 
 CREATE TABLE IF NOT EXISTS versao_curriculo (
     id                  INTEGER PRIMARY KEY, -- VersaoCurso.id
@@ -251,9 +256,66 @@ CREATE TABLE IF NOT EXISTS cobertura_curso (
     PRIMARY KEY (curso_id, disciplina_id)
 );
 
+-- Equivalências julgadas (Fase 6b). Tabela separada de propósito: o palpite da
+-- heurística em `similaridade_ementa` nunca é sobrescrito.
+CREATE TABLE IF NOT EXISTS equivalencia_julgada (
+    disciplina_a  INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+    disciplina_b  INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+    veredito      TEXT NOT NULL,             -- equivalente | parcial | nao_equivalente
+    confianca     REAL,
+    justificativa TEXT,
+    julgador      TEXT,
+    julgado_em    TEXT,
+    PRIMARY KEY (disciplina_a, disciplina_b)
+);
+
+-- -----------------------------------------------------------------------------
+-- Auditoria do otimizador (Fase 6c) — para alinhar Python e o front TS
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS rota_gulosa (
+    ordem        INTEGER PRIMARY KEY,        -- posição na rota
+    curso_id     INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+    horas_passo  INTEGER NOT NULL,
+    horas_acum   INTEGER NOT NULL,
+    semestre     INTEGER NOT NULL,
+    disciplinas_novas INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rota_benchmark (
+    base_curso_id  INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+    alvo_curso_id  INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+    horas          INTEGER NOT NULL,         -- custo marginal de fechar o alvo
+    disciplinas    INTEGER NOT NULL,
+    semestres      INTEGER NOT NULL,
+    calculado_em   TEXT,
+    PRIMARY KEY (base_curso_id, alvo_curso_id)
+);
+
 -- -----------------------------------------------------------------------------
 -- Views de conveniência (para a dashboard e para queries exploratórias)
 -- -----------------------------------------------------------------------------
+-- Equivalência efetiva = o que o SIE declara + o que foi julgado equivalente.
+-- É a view que o front deve consumir no lugar de `equivalencia_item`.
+CREATE VIEW IF NOT EXISTS v_equivalencia_efetiva AS
+SELECT dc.disciplina_id  AS alvo_id,
+       ei.disciplina_req_id AS substituta_id,
+       'oficial'         AS origem,
+       1.0               AS confianca,
+       'equivalente'     AS veredito
+FROM equivalencia_item ei
+JOIN equivalencia_bloco eb      ON eb.id = ei.bloco_id
+JOIN disciplina_curriculo dc    ON dc.id = eb.disciplina_curriculo_id
+WHERE ei.disciplina_req_id IS NOT NULL
+  AND ei.disciplina_req_id <> dc.disciplina_id
+UNION ALL
+SELECT ej.disciplina_a, ej.disciplina_b, 'julgada', ej.confianca, ej.veredito
+FROM equivalencia_julgada ej
+WHERE ej.veredito IN ('equivalente', 'parcial')
+UNION ALL
+SELECT ej.disciplina_b, ej.disciplina_a, 'julgada', ej.confianca, ej.veredito
+FROM equivalencia_julgada ej
+WHERE ej.veredito IN ('equivalente', 'parcial');
+
 CREATE VIEW IF NOT EXISTS v_disciplina_curriculo AS
 SELECT
     dc.id                AS oferta_id,

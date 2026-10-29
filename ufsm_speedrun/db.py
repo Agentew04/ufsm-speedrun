@@ -40,13 +40,81 @@ def connect(db_path: Path = config.DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+VIEW_EQUIVALENCIA = """
+DROP VIEW IF EXISTS v_equivalencia_efetiva;
+CREATE VIEW v_equivalencia_efetiva AS
+SELECT dc.disciplina_id  AS alvo_id,
+       ei.disciplina_req_id AS substituta_id,
+       'oficial'         AS origem,
+       1.0               AS confianca,
+       'equivalente'     AS veredito
+FROM equivalencia_item ei
+JOIN equivalencia_bloco eb      ON eb.id = ei.bloco_id
+JOIN disciplina_curriculo dc    ON dc.id = eb.disciplina_curriculo_id
+WHERE ei.disciplina_req_id IS NOT NULL
+  AND ei.disciplina_req_id <> dc.disciplina_id
+UNION ALL
+SELECT ej.disciplina_a, ej.disciplina_b, 'julgada', ej.confianca, ej.veredito
+FROM equivalencia_julgada ej
+WHERE ej.veredito IN ('equivalente', 'parcial')
+UNION ALL
+SELECT ej.disciplina_b, ej.disciplina_a, 'julgada', ej.confianca, ej.veredito
+FROM equivalencia_julgada ej
+WHERE ej.veredito IN ('equivalente', 'parcial');
+"""
+
+
 def migrar(conn: sqlite3.Connection) -> None:
-    """Ajustes de schema em bancos já existentes (CREATE IF NOT EXISTS não altera)."""
-    colunas = {r[1] for r in conn.execute("PRAGMA table_info(similaridade_ementa)")}
-    if colunas and "score_final" not in colunas:
+    """Ajustes incrementais para bancos já existentes.
+
+    `CREATE TABLE IF NOT EXISTS` não adiciona coluna nem atualiza view, então
+    cada mudança de schema precisa vir parar aqui também.
+    """
+    # tabela de julgamento (a view depende dela)
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS equivalencia_julgada (
+            disciplina_a  INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+            disciplina_b  INTEGER NOT NULL REFERENCES disciplina(id) ON DELETE CASCADE,
+            veredito      TEXT NOT NULL,
+            confianca     REAL,
+            justificativa TEXT,
+            julgador      TEXT,
+            julgado_em    TEXT,
+            PRIMARY KEY (disciplina_a, disciplina_b)
+        );
+        CREATE TABLE IF NOT EXISTS rota_gulosa (
+            ordem        INTEGER PRIMARY KEY,
+            curso_id     INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+            horas_passo  INTEGER NOT NULL,
+            horas_acum   INTEGER NOT NULL,
+            semestre     INTEGER NOT NULL,
+            disciplinas_novas INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS rota_benchmark (
+            base_curso_id  INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+            alvo_curso_id  INTEGER NOT NULL REFERENCES curso(id) ON DELETE CASCADE,
+            horas          INTEGER NOT NULL,
+            disciplinas    INTEGER NOT NULL,
+            semestres      INTEGER NOT NULL,
+            calculado_em   TEXT,
+            PRIMARY KEY (base_curso_id, alvo_curso_id)
+        );
+        """
+    )
+
+    colunas_sim = {r[1] for r in conn.execute("PRAGMA table_info(similaridade_ementa)")}
+    if colunas_sim and "score_final" not in colunas_sim:
         conn.execute("ALTER TABLE similaridade_ementa ADD COLUMN score_final REAL")
-    if colunas and "motivo" not in colunas:
+    if colunas_sim and "motivo" not in colunas_sim:
         conn.execute("ALTER TABLE similaridade_ementa ADD COLUMN motivo TEXT")
+
+    colunas_curso = {r[1] for r in conn.execute("PRAGMA table_info(curso)")}
+    if colunas_curso and "eh_nucleo_comum" not in colunas_curso:
+        conn.execute("ALTER TABLE curso ADD COLUMN eh_nucleo_comum INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE curso ADD COLUMN nucleo_comum_motivo TEXT")
+
+    conn.executescript(VIEW_EQUIVALENCIA)
     conn.commit()
 
 

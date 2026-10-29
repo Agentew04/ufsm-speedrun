@@ -14,8 +14,9 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from . import (config, curriculos, db, discover, ementas, endpoints,
+from . import (auditor, config, curriculos, db, discover, ementas, endpoints,
                equivalencia, julgamento, relacoes, validacao)
+from .classificacao import classificar as classificar_cursos
 from .http import UfsmClient
 
 VERSAO_DEMO = "104760"  # Ciência da Computação, currículo 2024
@@ -305,6 +306,46 @@ def cmd_julgar_aplicar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_classificar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        classificar_cursos(conn)
+    finally:
+        conn.close()
+    return 0
+
+
+def cmd_auditar(args: argparse.Namespace) -> int:
+    if not Path(config.DB_PATH).exists():
+        print(f"banco não existe em {config.DB_PATH} — rode: init-db")
+        return 1
+    conn = db.connect()
+    try:
+        if args.front:
+            return auditor.comparar(conn, Path(args.front))
+        resultado = auditor.run(conn, base_id=args.base,
+                                com_julgadas=not args.sem_julgadas)
+        print(f"\n  top 10 mais baratos de fechar a partir de {resultado['base'].nome}:")
+        ranking = conn.execute(
+            """
+            SELECT rb.alvo_curso_id, c.nome, rb.horas, rb.disciplinas, rb.semestres
+            FROM rota_benchmark rb
+            JOIN curso c ON c.id = rb.alvo_curso_id
+            WHERE rb.base_curso_id = ? AND c.eh_nucleo_comum = 0
+            ORDER BY rb.horas ASC LIMIT 10
+            """,
+            (resultado["base"].id,),
+        ).fetchall()
+        for alvo, nome, horas, disc, sem in ranking:
+            print(f"    {horas:>5} h · {disc:>3} disc · {sem} sem   {nome[:56]}")
+    finally:
+        conn.close()
+    return 0
+
+
 def cmd_stats(args: argparse.Namespace) -> int:
     from .recorder import Recorder
 
@@ -433,6 +474,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dir", default=None, help="pasta dos vereditos (padrão: data/exports/lotes)")
     p.add_argument("--julgador", default="llm", help="rótulo de quem julgou")
     p.set_defaults(func=cmd_julgar_aplicar)
+
+    p = sub.add_parser("classificar", help="marca cursos ABI/núcleo comum no banco")
+    p.set_defaults(func=cmd_classificar)
+
+    p = sub.add_parser("auditar", help="fase 6c: auditor do otimizador (rota + benchmark)")
+    p.add_argument("--base", type=int, default=None, help="id do curso-base (padrão: Ciência da Computação)")
+    p.add_argument("--sem-julgadas", action="store_true",
+                   help="usar só as equivalências oficiais (padrão: oficial + julgadas)")
+    p.add_argument("--front", default=None,
+                   help="JSON exportado pelo front para comparar as duas implementações")
+    p.set_defaults(func=cmd_auditar)
 
     p = sub.add_parser("stats", help="mostra o que já foi coletado")
     p.set_defaults(func=cmd_stats)

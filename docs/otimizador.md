@@ -115,6 +115,42 @@ O que **não** fazer: UI, agenda interativa, segundo grafo.
 3. **Auditor do guloso** — rede de segurança quando coleta ou equivalência mudar.
 4. **Campus na rota** — só se o produto for usar isso de verdade.
 
+## 4b. Implementado (2026-10-28)
+
+| item | estado |
+|---|---|
+| `v_equivalencia_efetiva` (oficial + julgadas) | ✅ criada |
+| `curso.eh_nucleo_comum` + motivo | ✅ 2 cursos classificados |
+| auditor `ufsm_speedrun/auditor.py` | ✅ roda e grava `rota_gulosa` + `rota_benchmark` |
+| `auditar --front arquivo.json` | ✅ compara as duas implementações |
+| nota para o frontend | ✅ `docs/nota-frontend.md` |
+
+Comandos:
+
+```powershell
+python -m ufsm_speedrun classificar   # marca ABI/núcleo comum
+python -m ufsm_speedrun auditar       # rota + benchmark + JSON
+python -m ufsm_speedrun auditar --front data/exports/front.json
+```
+
+### Impacto das equivalências julgadas
+
+Rota que fecha os 145 cursos (base = Ciência da Computação):
+
+| equivalências | disciplinas | horas |
+|---|---|---|
+| só oficiais | 5.144 | 309.175 |
+| **oficiais + julgadas** | **4.991** | **301.480** |
+
+**−153 disciplinas e −7.695 h** — é o argumento para o front passar a ler a view.
+
+### Custo/benefício do auditor
+
+- benchmark 148 × 147 + guloso completo: ~1 min de CPU
+- roda offline, 1× por mudança de coleta ou de regra
+- serve de teste de regressão: se a coleta mudar, os números mudam e a divergência
+  aparece antes de chegar no usuário
+
 ## 7. Números para calibrar
 
 ```
